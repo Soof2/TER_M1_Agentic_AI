@@ -17,14 +17,15 @@ Projet realise dans le cadre d'un TER (Travail d'Etude et de Recherche) de Maste
 7. [Installation](#7-installation)
 8. [Utilisation](#8-utilisation)
 9. [Configuration](#9-configuration)
-10. [Fonctionnement detaille de chaque agent](#10-fonctionnement-detaille-de-chaque-agent)
-11. [Outils (Tools)](#11-outils-tools)
-12. [Routage conditionnel](#12-routage-conditionnel)
-13. [Human-in-the-loop](#13-human-in-the-loop)
-14. [Logs et suivi en temps reel](#14-logs-et-suivi-en-temps-reel)
-15. [Exemple d'execution complete](#15-exemple-dexecution-complete)
-16. [Prompts systeme](#16-prompts-systeme)
-17. [Limites et pistes d'amelioration](#17-limites-et-pistes-damelioration)
+10. [Gitflow — Travail en equipe](#10-gitflow--travail-en-equipe)
+11. [Fonctionnement detaille de chaque agent](#11-fonctionnement-detaille-de-chaque-agent)
+12. [Outils (Tools)](#12-outils-tools)
+13. [Routage conditionnel](#13-routage-conditionnel)
+14. [Human-in-the-loop](#14-human-in-the-loop)
+15. [Logs et suivi en temps reel](#15-logs-et-suivi-en-temps-reel)
+16. [Exemple d'execution complete](#16-exemple-dexecution-complete)
+17. [Prompts systeme](#17-prompts-systeme)
+18. [Limites et pistes d'amelioration](#18-limites-et-pistes-damelioration)
 
 ---
 
@@ -364,7 +365,62 @@ Conditions : CDI, Paris, teletravail hybride 3j/2j, 55-70K euros
 
 ---
 
-## 9. Configuration
+## 10. Gitflow — Travail en equipe
+
+On est 3 sur le projet. Chacun travaille sur une branche separee, on merge dans `main` par Pull Request.
+
+### Branches
+
+```
+main                          ← stable, toujours fonctionnel — personne ne push directement
+  │
+  ├── feat/sourcing           ← Chantier 1 : refonte A3 (scraping, filtrage, APIs)
+  │
+  ├── feat/scoring            ← Chantier 2 : prompt A4 + routage conditionnel
+  │
+  └── feat/...                ← toute autre feature
+```
+
+### Regles
+
+- **Jamais de push direct sur `main`**
+- Chaque chantier = une branche `feat/xxx`
+- Pour integrer dans main = **Pull Request** avec review par au moins 1 coequipier
+- Rebase sur main regulierement pour eviter les gros conflits
+
+### Repartition par chantier
+
+Les chantiers touchent des fichiers differents → peu de conflits :
+
+| Personne | Branche | Fichiers principaux |
+|----------|---------|-------------------|
+| Personne 1 | `feat/sourcing` | `agents/chercheur.py`, `tools/search.py`, `tools/scraping.py`, `state.py` (nouveaux champs), `graph.py` (nouveaux noeuds) |
+| Personne 2 | `feat/scoring` | `agents/evaluateur.py`, `prompts.py`, `graph.py` (routage), `config.py` (seuils), `main.py` (arg `--seuil`) |
+| Personne 3 | Au choix | API/MCP, interface web, ou renfort sur un chantier |
+
+**Zones de conflit potentielles** : `graph.py` et `state.py` — les personnes qui les touchent doivent se coordonner.
+
+### Workflow quotidien
+
+```bash
+# Avant de travailler — se mettre a jour
+git checkout feat/ma-branche
+git fetch origin
+git rebase origin/main
+
+# Travailler, commit souvent
+git add fichiers_modifies
+git commit -m "description claire"
+
+# Pousser
+git push origin feat/ma-branche
+
+# Quand c'est pret — PR vers main, review par un coequipier
+```
+
+---
+
+## 11. Configuration
 
 Fichier : `src/config.py`
 
@@ -395,7 +451,7 @@ Verifier les modeles disponibles avec `ollama list`.
 
 ---
 
-## 10. Fonctionnement detaille de chaque agent
+## 12. Fonctionnement detaille de chaque agent
 
 ### A1 — Orchestrateur (`src/agents/orchestrateur.py`)
 
@@ -488,7 +544,7 @@ Pour chaque candidat eligible :
 
 ---
 
-## 11. Outils (Tools)
+## 13. Outils (Tools)
 
 ### `src/tools/search.py`
 
@@ -510,7 +566,7 @@ Chaque outil est un `@tool` LangChain. Les resultats sont formates en texte stru
 
 ---
 
-## 12. Routage conditionnel
+## 14. Routage conditionnel
 
 Apres que A5 a verifie les candidats, le graphe route selon le meilleur score :
 
@@ -541,7 +597,7 @@ def route_apres_verification(state):
 
 ---
 
-## 13. Human-in-the-loop
+## 15. Human-in-the-loop
 
 Active par defaut (desactivable avec `--no-interrupt`).
 
@@ -568,7 +624,7 @@ Le checkpointer sauvegarde l'etat a chaque etape. La reprise apres interruption 
 
 ---
 
-## 14. Logs et suivi en temps reel
+## 16. Logs et suivi en temps reel
 
 Chaque agent affiche des logs avec `print(..., flush=True)` pour un suivi en temps reel :
 
@@ -616,7 +672,7 @@ Chaque agent affiche des logs avec `print(..., flush=True)` pour un suivi en tem
 
 ---
 
-## 15. Exemple d'execution complete
+## 17. Exemple d'execution complete
 
 ### Commande
 
@@ -638,7 +694,7 @@ Duree totale : ~7 minutes (modele cloud avec rate limiting).
 
 ---
 
-## 16. Prompts systeme
+## 18. Prompts systeme
 
 Tous les prompts sont centralises dans `src/prompts.py`. Chaque agent a un prompt systeme dedie.
 
@@ -662,7 +718,7 @@ Produit un rapport structure : resume du poste, statistiques, classement, action
 
 ---
 
-## 17. Limites et pistes d'amelioration
+## 19. Limites et pistes d'amelioration
 
 ### Limites actuelles
 
