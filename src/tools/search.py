@@ -63,7 +63,8 @@ def _ddg_search_raw(
         with DDGS() as ddgs:
             results = list(ddgs.text(final_query, max_results=max_results))
     except Exception as e:
-        print(f"[search] Erreur DDG pour '{query[:50]}...': {e}", flush=True)
+        from src.logger import get_logger
+        get_logger("tools.search").warning("Erreur DDG pour '%s...': %s", query[:50], e)
         return []
 
     hits = []

@@ -13,11 +13,17 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from src.state import GraphState
 from src.config import OLLAMA_MODEL, OLLAMA_PROVIDER
 from src.prompts import ANALYSTE_SYSTEM
+from src.observabilite import get_metrics
+from src.logger import get_logger
+
+_log = get_logger("A2_analyste")
 
 
 def analyste_node(state: GraphState) -> dict:
     """Analyse la fiche de poste et extrait le profil de compétences."""
-    print("\n[A2 Analyste] Analyse de la fiche de poste en cours...", flush=True)
+    m = get_metrics()
+    m.debut("A2_analyste")
+    _log.info("Analyse de la fiche de poste en cours...")
     llm = init_chat_model(OLLAMA_MODEL, model_provider=OLLAMA_PROVIDER, temperature=0)
 
     messages = [
@@ -48,9 +54,10 @@ def analyste_node(state: GraphState) -> dict:
             "raw_response": content
         }
 
-    print(f"[A2 Analyste] Profil extrait : {len(profil.get('hard_skills', []))} hard skills, "
-          f"{len(profil.get('soft_skills', []))} soft skills, "
-          f"{len(profil.get('mots_cles', []))} mots-clés.", flush=True)
+    n_hard = len(profil.get('hard_skills', []))
+    n_soft = len(profil.get('soft_skills', []))
+    _log.info("Profil extrait : %d hard skills, %d soft skills, %d mots-clés.", n_hard, n_soft, len(profil.get('mots_cles', [])))
+    m.fin("A2_analyste", n_hard_skills=n_hard, n_soft_skills=n_soft)
 
     return {
         "profil_competences": profil,

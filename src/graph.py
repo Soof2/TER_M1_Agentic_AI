@@ -2,9 +2,11 @@
 Construction du graphe LangGraph — cœur du SMA de recrutement.
 
 Architecture :
-    START → orchestrateur → analyste → chercheur → deduplicateur
-    → [Send() × N] evaluateur → reduce_scores → verificateur
-    → (conditionnel) recruteur | rapport → END
+    START → orchestrateur → analyste
+          → chercheur_stratege (A3a) → chercheur_collecteur (A3b) → chercheur_filtre (A3c)
+          → deduplicateur
+          → [Send() × N] evaluateur → reduce_scores → verificateur
+          → (conditionnel) recruteur | rapport → END
 
 Patterns SMA implémentés :
     - Superviseur (A1 coordonne via le flux du graphe)
@@ -13,6 +15,11 @@ Patterns SMA implémentés :
     - Validation pair-à-pair (A4 produit → A5 contrôle)
     - Routage conditionnel (score → A7 / rapport / fin)
     - Human-in-the-loop (interrupt_before sur A7)
+
+Division A3 (refactor architectural) :
+    A3a Stratège   — LLM génère les requêtes par source
+    A3b Collecteur — collecte DDG + GitHub API, dédup URL
+    A3c Filtre     — filtre bruit algorithmique + scraping
 """
 
 from langgraph.graph import StateGraph, START, END
@@ -20,10 +27,17 @@ from langgraph.types import Send
 from langgraph.checkpoint.memory import MemorySaver
 
 from src.state import GraphState
-from src.config import SCORE_SEUIL_CONTACT, SCORE_SEUIL_HUMAIN
+from src.config import SCORE_SEUIL_CONTACT, SCORE_SEUIL_HUMAIN, SCORE_SEUIL_VIABLE, TOP_N_RELATIF, MAX_PROFILS_PARALLELES
+from src.logger import get_logger
+from src.observabilite import get_metrics
+
+_log = get_logger("graph")
+
 from src.agents.orchestrateur import orchestrateur_node, reduce_scores_node, rapport_node
 from src.agents.analyste import analyste_node
-from src.agents.chercheur import chercheur_node
+from src.agents.chercheur_stratege import stratege_node
+from src.agents.chercheur_collecteur import collecteur_node
+from src.agents.chercheur_filtre import filtre_node
 from src.agents.deduplicateur import deduplicateur_node
 from src.agents.evaluateur import evaluateur_node
 from src.agents.verificateur import verificateur_node
@@ -39,10 +53,18 @@ def route_to_evaluateurs(state: GraphState) -> list[Send]:
     """
     profils = state.get("profils_dedupliques", [])
     if not profils:
-        print("\n[Graph] Aucun profil à évaluer, passage direct à la réduction.", flush=True)
+        _log.warning("Aucun profil à évaluer, passage direct à la réduction.")
         return [Send("reduce_scores", {})]
 
-    print(f"\n[Graph] Fan-out : envoi de {len(profils)} profils vers {len(profils)} évaluateurs parallèles (Send).", flush=True)
+    # Limiter le nombre d'instances parallèles pour éviter de surcharger l'API LLM
+    if len(profils) > MAX_PROFILS_PARALLELES:
+        _log.warning(
+            "%d profils disponibles, limite à %d évaluateurs parallèles (MAX_PROFILS_PARALLELES).",
+            len(profils), MAX_PROFILS_PARALLELES,
+        )
+        profils = profils[:MAX_PROFILS_PARALLELES]
+
+    _log.info("Fan-out : envoi de %d profils vers %d évaluateurs parallèles (Send).", len(profils), len(profils))
     return [
         Send("evaluateur", {
             "candidat": candidat,
@@ -55,24 +77,43 @@ def route_to_evaluateurs(state: GraphState) -> list[Send]:
 def route_apres_verification(state: GraphState) -> str:
     """Routage conditionnel après vérification par A5.
 
-    - score >= 75 → recruteur (A7 contacte les candidats)
-    - score 50-75 → rapport (décision humaine requise)
-    - score < 50  → rapport (aucun candidat viable)
+    Routage absolu :
+    - meilleur score >= SCORE_SEUIL_CONTACT → recruteur (A7 contacte)
+
+    Routage relatif (fallback) :
+    - si aucun >= seuil mais au moins 1 >= SCORE_SEUIL_VIABLE → recruteur
+      avec les TOP_N_RELATIF meilleurs (signalés comme "relatif")
+    - sinon → rapport (aucun candidat viable)
     """
     candidats_valides = state.get("candidats_valides", [])
 
     if not candidats_valides:
-        print("\n[Graph] Routage : aucun candidat validé -> rapport.", flush=True)
+        _log.info("Routage : aucun candidat validé -> rapport.")
+        get_metrics().noter("routage", decision="rapport", raison="aucun_candidat")
         return "rapport"
 
     meilleur_score = max(c["score_final"] for c in candidats_valides)
 
     if meilleur_score >= SCORE_SEUIL_CONTACT:
-        print(f"\n[Graph] Routage : meilleur score {meilleur_score} >= {SCORE_SEUIL_CONTACT} -> A7 Recruteur.", flush=True)
+        _log.info("Routage absolu : meilleur score %.1f >= %d -> A7 Recruteur.", meilleur_score, SCORE_SEUIL_CONTACT)
+        get_metrics().noter("routage", decision="recruteur", mode="absolu", meilleur_score=meilleur_score)
         return "recruteur"
-    else:
-        print(f"\n[Graph] Routage : meilleur score {meilleur_score} < {SCORE_SEUIL_CONTACT} -> rapport (pas de contact).", flush=True)
-        return "rapport"
+
+    # Routage relatif : prendre les TOP_N meilleurs si au moins un est viable
+    viables = [c for c in candidats_valides if c["score_final"] >= SCORE_SEUIL_VIABLE]
+    if viables:
+        top = sorted(viables, key=lambda x: x["score_final"], reverse=True)[:TOP_N_RELATIF]
+        noms = ", ".join(f"{c['nom'][:30]} ({c['score_final']})" for c in top)
+        _log.info(
+            "Routage relatif : aucun >= %d, mais %d viable(s) >= %d. Top-%d : %s",
+            SCORE_SEUIL_CONTACT, len(viables), SCORE_SEUIL_VIABLE, TOP_N_RELATIF, noms
+        )
+        get_metrics().noter("routage", decision="recruteur", mode="relatif", meilleur_score=meilleur_score)
+        return "recruteur"
+
+    _log.info("Routage : meilleur score %.1f < %d -> rapport (aucun viable).", meilleur_score, SCORE_SEUIL_VIABLE)
+    get_metrics().noter("routage", decision="rapport", raison="score_insuffisant", meilleur_score=meilleur_score)
+    return "rapport"
 
 
 def build_graph(with_interrupt: bool = True) -> StateGraph:
@@ -90,7 +131,12 @@ def build_graph(with_interrupt: bool = True) -> StateGraph:
     # --- Ajout des nœuds ---
     graph.add_node("orchestrateur", orchestrateur_node)
     graph.add_node("analyste", analyste_node)
-    graph.add_node("chercheur", chercheur_node)
+
+    # A3 divisé en 3 nœuds spécialisés
+    graph.add_node("chercheur_stratege", stratege_node)       # A3a : LLM → requêtes
+    graph.add_node("chercheur_collecteur", collecteur_node)   # A3b : DDG + GitHub API
+    graph.add_node("chercheur_filtre", filtre_node)           # A3c : filtre + scraping
+
     graph.add_node("deduplicateur", deduplicateur_node)
     graph.add_node("evaluateur", evaluateur_node)
     graph.add_node("reduce_scores", reduce_scores_node)
@@ -101,10 +147,14 @@ def build_graph(with_interrupt: bool = True) -> StateGraph:
     # --- Arêtes séquentielles (pipeline principal) ---
     graph.add_edge(START, "orchestrateur")
     graph.add_edge("orchestrateur", "analyste")
-    graph.add_edge("analyste", "chercheur")
-    graph.add_edge("chercheur", "deduplicateur")
 
-    # --- Fan-out : déduplicateur → N × évaluateur via Send() ---
+    # Pipeline A3 : stratege → collecteur → filtre
+    graph.add_edge("analyste", "chercheur_stratege")
+    graph.add_edge("chercheur_stratege", "chercheur_collecteur")
+    graph.add_edge("chercheur_collecteur", "chercheur_filtre")
+    graph.add_edge("chercheur_filtre", "deduplicateur")
+
+    # --- Fan-out : deduplicateur → N × évaluateur via Send() ---
     graph.add_conditional_edges(
         "deduplicateur",
         route_to_evaluateurs,

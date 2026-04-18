@@ -15,6 +15,8 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from src.state import CandidatScore
 from src.config import OLLAMA_MODEL, OLLAMA_PROVIDER
 from src.prompts import EVALUATEUR_SYSTEM
+from src.observabilite import get_metrics
+from src.logger import get_logger
 
 
 def evaluateur_node(state: dict) -> dict:
@@ -26,8 +28,11 @@ def evaluateur_node(state: dict) -> dict:
     """
     candidat = state["candidat"]
     profil = state["profil_competences"]
+    log = get_logger("A4_evaluateur")
+    m = get_metrics()
+    m.debut(f"A4_{candidat['id']}")
 
-    print(f"[A4 Évaluateur] Évaluation de : {candidat['nom']} (source: {candidat['source']})...", flush=True)
+    log.info("Évaluation de : %s (source: %s)", candidat['nom'], candidat['source'])
 
     llm = init_chat_model(OLLAMA_MODEL, model_provider=OLLAMA_PROVIDER, temperature=0)
 
@@ -55,7 +60,7 @@ Profil :
         except Exception as e:
             if "429" in str(e) or "too many" in str(e).lower():
                 wait = (2 ** attempt) + random.uniform(0, 1)
-                print(f"[A4 Évaluateur] Rate limit pour {candidat['nom']}, retry {attempt+1}/5 dans {wait:.1f}s...", flush=True)
+                log.warning("Rate limit pour %s, retry %d/5 dans %.1fs...", candidat['nom'], attempt + 1, wait)
                 time.sleep(wait)
             else:
                 raise
@@ -101,7 +106,8 @@ Profil :
         resume=scores.get("resume", "")
     )
 
-    print(f"[A4 Évaluateur] {candidat['nom']} -> score: {score_global}/100", flush=True)
+    log.info("%s -> score: %.1f/100", candidat['nom'], score_global)
+    m.fin(f"A4_{candidat['id']}", nom=candidat['nom'], score=score_global, source=candidat['source'])
 
     return {
         "candidats_scores": [candidat_score]

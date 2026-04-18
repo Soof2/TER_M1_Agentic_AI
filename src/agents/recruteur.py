@@ -11,25 +11,51 @@ from langchain_classic.chat_models import init_chat_model
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from src.state import GraphState
-from src.config import OLLAMA_MODEL, OLLAMA_PROVIDER, SCORE_SEUIL_CONTACT
+from src.config import OLLAMA_MODEL, OLLAMA_PROVIDER, SCORE_SEUIL_CONTACT, SCORE_SEUIL_VIABLE, TOP_N_RELATIF
 from src.prompts import RECRUTEUR_SYSTEM
+from src.observabilite import get_metrics
+from src.logger import get_logger
+
+_log = get_logger("A7_recruteur")
 
 
-def recruteur_node(state: GraphState) -> dict:
-    """Rédige des messages de contact pour les candidats validés au-dessus du seuil."""
+def recruteur_node(state: GraphState) -> dict:  # noqa: C901
+    """Rédige des messages de contact pour les candidats validés.
+
+    Mode absolu  : candidats avec score >= SCORE_SEUIL_CONTACT.
+    Mode relatif : si aucun n'atteint le seuil, prend les TOP_N_RELATIF
+                   meilleurs avec score >= SCORE_SEUIL_VIABLE.
+    """
+    m = get_metrics()
+    m.debut("A7_recruteur")
     candidats_valides = state.get("candidats_valides", [])
     fiche_poste = state.get("fiche_poste", "")
 
-    # Filtrer les candidats au-dessus du seuil de contact
+    # Mode absolu : candidats clairement au-dessus du seuil
     top_candidats = [
         c for c in candidats_valides
-        if c["statut"] == "valide" and c["score_final"] >= SCORE_SEUIL_CONTACT
+        if c["score_final"] >= SCORE_SEUIL_CONTACT
     ]
 
-    print(f"\n[A7 Recruteur] {len(top_candidats)} candidats au-dessus du seuil de {SCORE_SEUIL_CONTACT}/100.", flush=True)
+    mode = "absolu"
+    if not top_candidats:
+        # Mode relatif : top-N parmi les viables
+        viables = sorted(
+            [c for c in candidats_valides if c["score_final"] >= SCORE_SEUIL_VIABLE],
+            key=lambda x: x["score_final"],
+            reverse=True
+        )
+        top_candidats = viables[:TOP_N_RELATIF]
+        mode = "relatif"
+
+    _log.info(
+        "%d candidat(s) sélectionné(s) [mode %s, seuil %s].",
+        len(top_candidats), mode,
+        SCORE_SEUIL_CONTACT if mode == "absolu" else f">={SCORE_SEUIL_VIABLE} top-{TOP_N_RELATIF}"
+    )
 
     if not top_candidats:
-        print("[A7 Recruteur] Aucun candidat à contacter.", flush=True)
+        _log.warning("Aucun candidat à contacter.")
         return {"messages_envoyes": []}
 
     llm = init_chat_model(OLLAMA_MODEL, model_provider=OLLAMA_PROVIDER, temperature=0.7)
@@ -77,9 +103,10 @@ Rédige un message de premier contact personnalisé pour chaque candidat."""
             for c in top_candidats
         ]
 
-    print(f"[A7 Recruteur] {len(messages_contact)} messages de contact rédigés.", flush=True)
-    for m in messages_contact:
-        print(f"[A7 Recruteur]   -> {m.get('nom', '?')} via {m.get('canal', '?')}", flush=True)
+    _log.info("%d messages de contact rédigés.", len(messages_contact))
+    for msg in messages_contact:
+        _log.info("  -> %s via %s", msg.get('nom', '?'), msg.get('canal', '?'))
+    m.fin("A7_recruteur", n_messages=len(messages_contact), mode=mode)
 
     return {
         "messages_envoyes": messages_contact,

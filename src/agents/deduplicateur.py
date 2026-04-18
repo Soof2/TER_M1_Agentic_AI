@@ -10,15 +10,21 @@ en entrée du pipeline d'évaluation.
 from difflib import SequenceMatcher
 
 from src.state import GraphState, Candidat
+from src.observabilite import get_metrics
+from src.logger import get_logger
+
+_log = get_logger("A6_deduplicateur")
 
 
 def deduplicateur_node(state: GraphState) -> dict:
     """Déduplique les profils bruts par similarité de noms et URLs."""
+    m = get_metrics()
+    m.debut("A6_deduplicateur")
     profils = state.get("profils_bruts", [])
-    print(f"\n[A6 Déduplicateur] Analyse de {len(profils)} profils bruts...", flush=True)
+    _log.info("Analyse de %d profils bruts...", len(profils))
 
     if not profils:
-        print("[A6 Déduplicateur] Aucun profil à dédupliquer.", flush=True)
+        _log.warning("Aucun profil à dédupliquer.")
         return {"profils_dedupliques": []}
 
     dedupliques: list[Candidat] = []
@@ -53,8 +59,8 @@ def deduplicateur_node(state: GraphState) -> dict:
         used.add(i)
 
     n_removed = len(profils) - len(dedupliques)
-    print(f"[A6 Déduplicateur] {len(dedupliques)} profils uniques conservés "
-          f"({n_removed} doublons fusionnés).", flush=True)
+    _log.info("%d profils uniques conservés (%d doublons fusionnés).", len(dedupliques), n_removed)
+    m.fin("A6_deduplicateur", n_entree=len(profils), n_sortie=len(dedupliques), n_doublons=n_removed)
 
     return {"profils_dedupliques": dedupliques}
 

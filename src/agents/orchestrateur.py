@@ -15,13 +15,16 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from src.state import GraphState
 from src.config import OLLAMA_MODEL, OLLAMA_PROVIDER
 from src.prompts import ORCHESTRATEUR_RAPPORT_SYSTEM
+from src.observabilite import get_metrics
+from src.logger import get_logger
+
+_log = get_logger("A1_orchestrateur")
 
 
 def orchestrateur_node(state: GraphState) -> dict:
     """Point d'entrée : reçoit la fiche de poste et initialise le pipeline."""
-    print("\n[A1 Orchestrateur] Réception de la fiche de poste...", flush=True)
-    print(f"[A1 Orchestrateur] Fiche : {state['fiche_poste'][:100]}...", flush=True)
-    print("[A1 Orchestrateur] Démarrage du pipeline multi-agents.", flush=True)
+    _log.info("Réception de la fiche de poste : %s...", state['fiche_poste'][:80])
+    _log.info("Démarrage du pipeline multi-agents.")
     return {
         "messages": [
             HumanMessage(content=f"[Orchestrateur] Lancement du recrutement pour :\n{state['fiche_poste']}")
@@ -36,8 +39,9 @@ def reduce_scores_node(state: GraphState) -> dict:
     candidats_scores. Ce nœud sert de point de synchronisation (fan-in)
     avant de passer au vérificateur.
     """
+    log = get_logger("reduce")
     n_scores = len(state.get("candidats_scores", []))
-    print(f"\n[Reduce] Fan-in : {n_scores} scores agrégés depuis les évaluateurs parallèles.", flush=True)
+    log.info("Fan-in : %d scores agrégés depuis les évaluateurs parallèles.", n_scores)
     return {
         "messages": [
             HumanMessage(content=f"[Réduction] {n_scores} candidats évalués, passage à la vérification.")
@@ -47,7 +51,7 @@ def reduce_scores_node(state: GraphState) -> dict:
 
 def rapport_node(state: GraphState) -> dict:
     """Produit le rapport final en agrégeant les résultats de tous les agents."""
-    print("\n[A1 Rapport] Génération du rapport final...", flush=True)
+    _log.info("Génération du rapport final...")
     llm = init_chat_model(OLLAMA_MODEL, model_provider=OLLAMA_PROVIDER, temperature=0.3)
 
     # Assembler les données pour le rapport
@@ -63,6 +67,19 @@ def rapport_node(state: GraphState) -> dict:
             f"- {c['nom']} | Score: {c['score_final']} | "
             f"Statut: {c['statut']} | {c['remarques']}\n"
         )
+
+    # Exporter les métriques d'observabilité
+    m = get_metrics()
+    m.noter(
+        "pipeline",
+        n_profils_bruts=n_bruts,
+        n_profils_dedup=n_dedup,
+        n_scores=len(state.get("candidats_scores", [])),
+        n_valides=len(candidats_valides),
+        n_messages=len(messages_envoyes),
+    )
+    metriques_export = m.exporter()
+    metriques_resume = m.resume_texte()
 
     rapport_msg = f"""Données du processus de recrutement :
 
@@ -85,6 +102,9 @@ CLASSEMENT DES CANDIDATS :
 MESSAGES ENVOYÉS :
 {len(messages_envoyes)} message(s) de contact
 
+MÉTRIQUES D'EXÉCUTION :
+{metriques_resume}
+
 Produis le rapport final structuré."""
 
     messages = [
@@ -93,7 +113,7 @@ Produis le rapport final structuré."""
     ]
 
     response = llm.invoke(messages)
-    print("[A1 Rapport] Rapport final généré.", flush=True)
+    _log.info("Rapport final généré.")
 
     return {
         "rapport_final": response.content,

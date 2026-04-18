@@ -12,6 +12,7 @@ import sys
 import uuid
 
 from src.graph import build_graph
+from src.observabilite import reset_metrics
 
 
 def main():
@@ -49,6 +50,9 @@ def main():
     print("=" * 60)
     print(f"\nFiche de poste :\n{fiche_poste}\n")
     print("-" * 60)
+
+    # Initialiser les métriques d'observabilité pour ce run
+    reset_metrics()
 
     # Construire le graphe
     with_interrupt = not args.no_interrupt

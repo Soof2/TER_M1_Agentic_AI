@@ -7,21 +7,28 @@ sous-champs (candidats_scores / candidats_valides) impose cette contrainte.
 """
 
 import json
+import re
 from langchain_classic.chat_models import init_chat_model
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from src.state import GraphState, CandidatValide
 from src.config import OLLAMA_MODEL, OLLAMA_PROVIDER
 from src.prompts import VERIFICATEUR_SYSTEM
+from src.observabilite import get_metrics
+from src.logger import get_logger
+
+_log = get_logger("A5_verificateur")
 
 
 def verificateur_node(state: GraphState) -> dict:
     """Vérifie et valide les scores des candidats."""
+    m = get_metrics()
+    m.debut("A5_verificateur")
     candidats_scores = state.get("candidats_scores", [])
-    print(f"\n[A5 Vérificateur] Vérification de {len(candidats_scores)} candidats scorés...", flush=True)
+    _log.info("Vérification de %d candidats scorés...", len(candidats_scores))
 
     if not candidats_scores:
-        print("[A5 Vérificateur] Aucun candidat à vérifier.", flush=True)
+        _log.warning("Aucun candidat à vérifier.")
         return {"candidats_valides": []}
 
     llm = init_chat_model(OLLAMA_MODEL, model_provider=OLLAMA_PROVIDER, temperature=0)
@@ -74,17 +81,21 @@ Ajuste le score_final si nécessaire."""
     response = llm.invoke(messages)
     content = response.content.strip()
 
-    # Extraire le JSON
+    # Extraire le JSON (Mistral ajoute souvent du texte avant/après)
     try:
-        if content.startswith("```"):
+        if "```" in content:
             content = content.split("```")[1]
             if content.startswith("json"):
                 content = content[4:]
+        # Chercher un array JSON n'importe où dans la réponse
+        match = re.search(r'\[.*\]', content, re.DOTALL)
+        if match:
+            content = match.group()
         validations = json.loads(content)
         if not isinstance(validations, list):
             validations = [validations]
-    except json.JSONDecodeError:
-        # Fallback : valider tous les candidats avec leur score original
+    except (json.JSONDecodeError, AttributeError):
+        _log.warning("JSON non parsable depuis le vérificateur — fallback score original.")
         validations = [
             {
                 "candidat_id": cs["candidat_id"],
@@ -110,9 +121,10 @@ Ajuste le score_final si nécessaire."""
     n_valides = sum(1 for c in candidats_valides if c["statut"] == "valide")
     n_invalides = sum(1 for c in candidats_valides if c["statut"] == "invalide")
     n_douteux = sum(1 for c in candidats_valides if c["statut"] == "douteux")
-    print(f"[A5 Vérificateur] Résultat : {n_valides} valides, {n_douteux} douteux, {n_invalides} invalides.", flush=True)
+    _log.info("Résultat : %d valides, %d douteux, %d invalides.", n_valides, n_douteux, n_invalides)
     for c in sorted(candidats_valides, key=lambda x: x["score_final"], reverse=True):
-        print(f"[A5 Vérificateur]   - {c['nom']} | {c['score_final']}/100 | {c['statut']}", flush=True)
+        _log.info("  %s | %.1f/100 | %s", c['nom'], c['score_final'], c['statut'])
+    m.fin("A5_verificateur", n_entree=len(candidats_scores), n_valides=n_valides, n_douteux=n_douteux, n_invalides=n_invalides)
 
     return {
         "candidats_valides": candidats_valides,
