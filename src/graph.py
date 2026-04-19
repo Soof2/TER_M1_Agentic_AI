@@ -42,6 +42,7 @@ from src.agents.deduplicateur import deduplicateur_node
 from src.agents.evaluateur import evaluateur_node
 from src.agents.verificateur import verificateur_node
 from src.agents.recruteur import recruteur_node
+from src.agents.persistance import persistance_node
 
 
 def route_to_evaluateurs(state: GraphState) -> list[Send]:
@@ -143,6 +144,7 @@ def build_graph(with_interrupt: bool = True) -> StateGraph:
     graph.add_node("verificateur", verificateur_node)
     graph.add_node("recruteur", recruteur_node)
     graph.add_node("rapport", rapport_node)
+    graph.add_node("persistance", persistance_node)  # A8 — mémoire RAG
 
     # --- Arêtes séquentielles (pipeline principal) ---
     graph.add_edge(START, "orchestrateur")
@@ -177,9 +179,10 @@ def build_graph(with_interrupt: bool = True) -> StateGraph:
         }
     )
 
-    # --- Recruteur → rapport → fin ---
+    # --- Recruteur → rapport → persistance RAG → fin ---
     graph.add_edge("recruteur", "rapport")
-    graph.add_edge("rapport", END)
+    graph.add_edge("rapport", "persistance")
+    graph.add_edge("persistance", END)
 
     # --- Compilation avec checkpointer ---
     memory = MemorySaver()

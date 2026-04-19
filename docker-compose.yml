@@ -1,0 +1,36 @@
+services:
+
+  # Serveur LLM local (Ollama)
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    # Pour GPU NVIDIA : décommenter les lignes suivantes
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # SMA de recrutement
+  sma:
+    build: .
+    depends_on:
+      - ollama
+    env_file:
+      - .env          # fichier local (non versionné), voir .env.example
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    volumes:
+      - ./logs:/app/logs     # export des métriques d'observabilité
+      - ./data:/app/data     # persistance ChromaDB (mémoire RAG)
+    stdin_open: true
+    tty: true
+
+volumes:
+  ollama_data:

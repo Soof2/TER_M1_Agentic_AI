@@ -15,6 +15,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from src.state import CandidatScore
 from src.config import OLLAMA_MODEL, OLLAMA_PROVIDER
 from src.prompts import EVALUATEUR_SYSTEM
+from src.tools.rag import get_memoire
 from src.observabilite import get_metrics
 from src.logger import get_logger
 
@@ -34,6 +35,22 @@ def evaluateur_node(state: dict) -> dict:
 
     log.info("Évaluation de : %s (source: %s)", candidat['nom'], candidat['source'])
 
+    # --- Contexte RAG : profils similaires des runs précédents ---
+    contexte_rag = ""
+    try:
+        memoire = get_memoire()
+        similaires = memoire.rechercher_similaires(candidat["profil_brut"], n_results=2)
+        if similaires:
+            lignes = ["Profils similaires évalués lors de runs précédents (à titre de référence) :"]
+            for s in similaires:
+                lignes.append(
+                    f"  - {s['nom']} | score={s['score']}/100 | similarité={s['similarite']} | {s['remarques'][:100]}"
+                )
+            contexte_rag = "\n".join(lignes)
+            log.info("RAG : %d profil(s) similaire(s) récupéré(s) pour calibration.", len(similaires))
+    except Exception as e:
+        log.warning("RAG indisponible : %s", e)
+
     llm = init_chat_model(OLLAMA_MODEL, model_provider=OLLAMA_PROVIDER, temperature=0)
 
     eval_msg = f"""Profil de compétences requis :
@@ -44,7 +61,7 @@ Nom : {candidat['nom']}
 Source : {candidat['source']}
 Profil :
 {candidat['profil_brut']}
-
+{f"{chr(10)}{contexte_rag}" if contexte_rag else ""}
 Évalue ce candidat par rapport au profil requis."""
 
     messages = [
