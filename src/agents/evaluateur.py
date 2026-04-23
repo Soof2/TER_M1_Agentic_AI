@@ -124,7 +124,7 @@ Profil :
     )
 
     log.info("%s -> score: %.1f/100", candidat['nom'], score_global)
-    m.fin(f"A4_{candidat['id']}", nom=candidat['nom'], score=score_global, source=candidat['source'])
+    m.fin(f"A4_{candidat['id']}", candidat_nom=candidat['nom'], score=score_global, source=candidat['source'])
 
     return {
         "candidats_scores": [candidat_score]

@@ -31,11 +31,13 @@ _log = get_logger("A3c_filtre")
 # Mots-clés qui trahissent une offre d'emploi plutôt qu'un profil candidat.
 # Testés en minuscules sur title + body (pré-filtre) et sur le contenu scrapé.
 _NOISE_KEYWORDS = (
+    # Français — offres d'emploi
     "nous recherchons",
     "nous recrutons",
     "rejoignez-nous",
     "rejoignez notre",
     "postuler",
+    "postulez",
     "posez votre candidature",
     "candidature spontanée",
     "cdi à pourvoir",
@@ -55,6 +57,33 @@ _NOISE_KEYWORDS = (
     "hellowork",
     "pole-emploi",
     "france travail",
+    # Anglais — job postings
+    "we are hiring",
+    "we are looking for",
+    "job description",
+    "job board",
+    "apply now",
+    "apply for this job",
+    "submit your application",
+    "send your cv",
+    "requirements:",
+    "responsibilities:",
+    "what you will do",
+    "what we offer",
+    "about the role",
+    "about the position",
+    "years of experience required",
+    "competitive salary",
+    "equal opportunity employer",
+    "full-time",
+    "part-time",
+    "remote ok",
+    "hybrid",
+    # Bases de CV agrégées (pas des profils individuels)
+    "resume database",
+    "hire it people",
+    "search resumes",
+    "post a job",
 )
 
 # Domaines d'agrégateurs. Testés sur l'URL uniquement (plus fiable que le
@@ -79,15 +108,52 @@ _NOISE_DOMAINS = (
     "keljob.com",
     "regionsjob.com",
     "jobijoba.com",
+    # Agrégateurs anglophones détectés en production
+    "startup.jobs",
+    "devjobsscanner.com",
+    "hireitpeople.com",
+    "python.org/jobs",
+    "selbyjennings.com",
+    "lever.co",
+    "greenhouse.io",
+    "workable.com",
+    "recruiter.com",
+    "ziprecruiter.com",
+    "simplyhired.com",
+    "careerbuilder.com",
+    "dice.com",
+    "reed.co.uk",
+    "totaljobs.com",
+    "jobsite.co.uk",
+)
+
+# Fragments de chemin URL qui trahissent une page d'offre (indépendamment du domaine)
+_NOISE_URL_PATHS = (
+    "/jobs/",
+    "/job/",
+    "/offre/",
+    "/offres/",
+    "/careers/",
+    "/career/",
+    "/recrutement/",
+    "/emploi/",
+    "/job-board/",
+    "/job-offer/",
+    "/senior-python-developer-",  # pattern titre de poste dans URL
+    "/python-developer-jobs",
 )
 
 
 def _is_noise_url(url: str) -> bool:
-    """Vrai si l'URL appartient à un agrégateur d'offres d'emploi."""
+    """Vrai si l'URL appartient à un agrégateur d'offres d'emploi ou pointe vers une offre."""
     if not url:
         return False
     lowered = url.lower()
-    return any(domain in lowered for domain in _NOISE_DOMAINS)
+    if any(domain in lowered for domain in _NOISE_DOMAINS):
+        return True
+    if any(path in lowered for path in _NOISE_URL_PATHS):
+        return True
+    return False
 
 
 def _is_noise_text(text: str) -> bool:

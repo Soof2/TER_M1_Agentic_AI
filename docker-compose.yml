@@ -1,12 +1,13 @@
 services:
 
-  # Serveur LLM local (Ollama)
+  # Serveur LLM (Ollama)
   ollama:
     image: ollama/ollama
     ports:
       - "11434:11434"
     volumes:
-      - ollama_data:/root/.ollama
+      # Monte ~/.ollama du host → credentials + modèles déjà téléchargés
+      - ~/.ollama:/root/.ollama
     restart: unless-stopped
     # Pour GPU NVIDIA : décommenter les lignes suivantes
     # deploy:
@@ -17,20 +18,38 @@ services:
     #           count: all
     #           capabilities: [gpu]
 
-  # SMA de recrutement
-  sma:
+  # SMA de recrutement — API REST (FastAPI + Uvicorn)
+  sma-api:
     build: .
+    command: uvicorn src.api:app --host 0.0.0.0 --port 8000 --workers 1
     depends_on:
       - ollama
     env_file:
       - .env          # fichier local (non versionné), voir .env.example
     environment:
       - OLLAMA_HOST=http://ollama:11434
+    ports:
+      - "8000:8000"   # API Gateway accessible sur http://localhost:8000
     volumes:
       - ./logs:/app/logs     # export des métriques d'observabilité
       - ./data:/app/data     # persistance ChromaDB (mémoire RAG)
+    restart: unless-stopped
+
+  # SMA de recrutement — mode CLI interactif (optionnel)
+  sma-cli:
+    build: .
+    profiles:
+      - cli             # démarrer uniquement avec : docker compose --profile cli run sma-cli
+    depends_on:
+      - ollama
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
     stdin_open: true
     tty: true
 
-volumes:
-  ollama_data:
+# Plus besoin du volume nommé : on monte directement ~/.ollama du host
