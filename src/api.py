@@ -2,26 +2,39 @@
 API Gateway REST — FastAPI.
 
 Expose le SMA de recrutement comme un service HTTP REST :
-    POST /recruter          → lance le pipeline avec une fiche de poste
-    GET  /rapport/{run_id}  → récupère l'état d'un run (rapport + candidats)
-    GET  /health            → vérification de disponibilité du service
+    POST /recruter              → lance le pipeline avec une fiche de poste
+    GET  /rapport/{run_id}      → récupère l'état d'un run (rapport + candidats)
+    GET  /runs                  → liste tous les runs
+    GET  /runs/{run_id}/stream  → flux SSE des événements du pipeline (live)
+    POST /runs/{run_id}/hitl    → décision humaine pour reprendre un run
+                                  interrompu avant A7 (approve/skip/edit)
+    GET  /metrics               → métriques courantes + derniers exports JSON
+    GET  /rag                   → état de la mémoire vectorielle ChromaDB
+    GET  /health                → vérification de disponibilité
 
-Chaque run est identifié par un UUID. Les résultats sont conservés en
-mémoire pendant la durée de vie du processus (suffisant pour le prototype).
-Le pipeline tourne dans un thread séparé (run_in_executor) pour ne pas
+Chaque run est identifié par un UUID. Les résultats et la file d'événements
+sont conservés en mémoire pendant la durée de vie du processus (suffisant
+pour le prototype). Le pipeline tourne dans un thread séparé pour ne pas
 bloquer la boucle asyncio de FastAPI.
 """
 
+import asyncio
+import json
+import os
+import queue
+import sqlite3
+import threading
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, BackgroundTasks, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Query
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from src.graph import build_graph
-from src.observabilite import reset_metrics
+from src.observabilite import reset_metrics, get_metrics
 
 # ---------------------------------------------------------------------------
 # App FastAPI
@@ -31,17 +44,27 @@ app = FastAPI(
     title="SMA Recrutement — API Gateway",
     description=(
         "API REST exposant le système multi-agents de recrutement (LangGraph). "
-        "Permet de lancer des pipelines et de récupérer les rapports."
+        "Supporte le streaming SSE et le human-in-the-loop."
     ),
-    version="1.0.0",
+    version="1.1.0",
 )
 
 # ---------------------------------------------------------------------------
 # Stockage en mémoire des runs (prototype — pas de base de données)
 # ---------------------------------------------------------------------------
 
-# Structure : {run_id: RunInfo}
+# Structure : {run_id: RunInfo}. Les champs préfixés par "_" sont internes
+# et ne sont pas exposés via /rapport.
 _runs: dict[str, dict] = {}
+
+# Délai max d'attente d'une décision HITL avant abandon du run (secondes).
+_HITL_TIMEOUT = 600
+_LOGS_DIR = Path("logs")
+_CHROMA_DIR = Path("data/chromadb")
+_RUNS_DB_PATH = Path(os.getenv("RUNS_DB_PATH", "data/runs.sqlite"))
+_METRICS_HISTORY_LIMIT = 20
+_DB_LOCK = threading.Lock()
+
 
 # ---------------------------------------------------------------------------
 # Schémas de requête / réponse
@@ -60,7 +83,7 @@ class RecruterResponse(BaseModel):
 
 class RapportResponse(BaseModel):
     run_id: str
-    status: str          # "running" | "done" | "error"
+    status: str          # "running" | "awaiting_hitl" | "done" | "error"
     rapport: Optional[str] = None
     candidats: Optional[list] = None
     started_at: Optional[str] = None
@@ -68,15 +91,164 @@ class RapportResponse(BaseModel):
     erreur: Optional[str] = None
 
 
+class HitlDecision(BaseModel):
+    action: str                              # "approve" | "skip" | "edit"
+    candidats_retenus: Optional[list] = None  # requis si action=="edit"
+
+
 # ---------------------------------------------------------------------------
-# Logique d'exécution du pipeline
+# Helpers d'événements — poussés par le worker, lus par le flux SSE
+# ---------------------------------------------------------------------------
+
+def _push_event(run_id: str, event_type: str, data: dict) -> None:
+    """Ajoute un événement typé à la file de diffusion du run.
+
+    Thread-safe : `queue.Queue` supporte l'accès multi-thread. Les
+    consommateurs SSE récupèrent les événements par polling non bloquant.
+    """
+    info = _runs.get(run_id)
+    if info is None:
+        return
+    q = info.get("_event_queue")
+    if q is None:
+        return
+    q.put({
+        "type": event_type,
+        "data": {**data, "ts": datetime.now(timezone.utc).isoformat()},
+    })
+
+
+def _close_event_stream(run_id: str) -> None:
+    """Pousse le sentinel None : les flux SSE ouverts sortent de leur boucle."""
+    info = _runs.get(run_id)
+    if info is None:
+        return
+    q = info.get("_event_queue")
+    if q is not None:
+        q.put(None)
+
+
+# ---------------------------------------------------------------------------
+# Persistance SQLite des runs
+# ---------------------------------------------------------------------------
+
+def _internal_run_fields(info: dict) -> dict:
+    """Champs internes non persistés, recréés à chaque démarrage API."""
+    return {
+        "_event_queue": queue.Queue(),
+        "_hitl_event": threading.Event(),
+        "_hitl_decision": {},
+        "_candidats_pending_hitl": [],
+        "_with_interrupt": info.get("_with_interrupt", False),
+    }
+
+
+def _init_runs_db() -> None:
+    """Crée la table SQLite des runs si nécessaire."""
+    _RUNS_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with _DB_LOCK, sqlite3.connect(_RUNS_DB_PATH) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS runs (
+                run_id TEXT PRIMARY KEY,
+                fiche_poste TEXT NOT NULL,
+                status TEXT NOT NULL,
+                rapport TEXT,
+                candidats_json TEXT,
+                erreur TEXT,
+                started_at TEXT,
+                finished_at TEXT,
+                with_interrupt INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+
+
+def _save_run(run_id: str) -> None:
+    """Persiste l'état public d'un run en SQLite."""
+    info = _runs.get(run_id)
+    if info is None:
+        return
+    with _DB_LOCK, sqlite3.connect(_RUNS_DB_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO runs (
+                run_id, fiche_poste, status, rapport, candidats_json,
+                erreur, started_at, finished_at, with_interrupt
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(run_id) DO UPDATE SET
+                fiche_poste=excluded.fiche_poste,
+                status=excluded.status,
+                rapport=excluded.rapport,
+                candidats_json=excluded.candidats_json,
+                erreur=excluded.erreur,
+                started_at=excluded.started_at,
+                finished_at=excluded.finished_at,
+                with_interrupt=excluded.with_interrupt
+            """,
+            (
+                run_id,
+                info.get("fiche_poste", ""),
+                info.get("status", "running"),
+                info.get("rapport"),
+                json.dumps(info.get("candidats"), ensure_ascii=False),
+                info.get("erreur"),
+                info.get("started_at"),
+                info.get("finished_at"),
+                1 if info.get("_with_interrupt") else 0,
+            ),
+        )
+
+
+def _load_runs_from_db() -> None:
+    """Recharge les runs persistés au démarrage de l'API."""
+    _init_runs_db()
+    with _DB_LOCK, sqlite3.connect(_RUNS_DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT * FROM runs ORDER BY started_at DESC").fetchall()
+
+    for row in rows:
+        try:
+            candidats = json.loads(row["candidats_json"]) if row["candidats_json"] else None
+        except json.JSONDecodeError:
+            candidats = None
+        status = row["status"]
+        erreur = row["erreur"]
+        finished_at = row["finished_at"]
+        if status in ("running", "awaiting_hitl"):
+            status = "error"
+            erreur = "Run interrompu par redémarrage de l'API."
+            finished_at = finished_at or datetime.now(timezone.utc).isoformat()
+
+        info = {
+            "run_id": row["run_id"],
+            "fiche_poste": row["fiche_poste"],
+            "status": status,
+            "rapport": row["rapport"],
+            "candidats": candidats,
+            "erreur": erreur,
+            "started_at": row["started_at"],
+            "finished_at": finished_at,
+            "_with_interrupt": bool(row["with_interrupt"]),
+        }
+        info.update(_internal_run_fields(info))
+        _runs[row["run_id"]] = info
+        if status != row["status"] or erreur != row["erreur"]:
+            _save_run(row["run_id"])
+
+
+# ---------------------------------------------------------------------------
+# Logique d'exécution du pipeline (thread worker)
 # ---------------------------------------------------------------------------
 
 def _run_pipeline(run_id: str, fiche_poste: str, with_interrupt: bool) -> None:
     """Exécute le pipeline LangGraph dans un thread dédié.
 
-    Modifie _runs[run_id] en place pour refléter l'avancement.
-    Appelé via executor.submit() pour ne pas bloquer asyncio.
+    Chaque événement (entrée/sortie de nœud, score A4, statut HITL) est
+    poussé dans la file du run pour diffusion SSE. Si `with_interrupt` est
+    vrai et que le graphe s'arrête avant A7, le worker bloque sur l'événement
+    `_hitl_event` jusqu'à réception d'une décision via POST /hitl.
     """
     from src.logger import get_logger
     log = get_logger("api")
@@ -84,24 +256,83 @@ def _run_pipeline(run_id: str, fiche_poste: str, with_interrupt: bool) -> None:
     try:
         log.info("Run %s : démarrage du pipeline.", run_id)
         _runs[run_id]["status"] = "running"
+        _save_run(run_id)
+        _push_event(run_id, "run_started", {"fiche_poste": fiche_poste[:200]})
 
-        # Réinitialiser les métriques pour ce run
         reset_metrics()
 
         app_graph = build_graph(with_interrupt=with_interrupt)
-        thread_id = run_id
-        config = {"configurable": {"thread_id": thread_id}}
+        config = {"configurable": {"thread_id": run_id}}
 
-        # Exécution complète (pas d'interaction humaine via API)
+        # --- Première phase : exécution jusqu'à interrupt ou fin ---
         for event in app_graph.stream(
             {"fiche_poste": fiche_poste},
             config=config,
             stream_mode="updates",
         ):
-            for node_name in event:
+            for node_name, payload in event.items():
                 log.info("Run %s : nœud [%s] terminé.", run_id, node_name)
+                _push_event(run_id, "node_completed", {
+                    "node": node_name,
+                    "summary": _resume_payload(payload),
+                })
 
-        # Récupérer l'état final
+        # --- Détection d'un interrupt (présence d'un nœud en attente) ---
+        state = app_graph.get_state(config)
+        if with_interrupt and state.next:
+            candidats_en_attente = state.values.get("candidats_valides", [])
+            log.info(
+                "Run %s : interrupt détecté avant %s, %d candidat(s) en attente.",
+                run_id, state.next, len(candidats_en_attente),
+            )
+            _runs[run_id]["status"] = "awaiting_hitl"
+            _runs[run_id]["_candidats_pending_hitl"] = candidats_en_attente
+            _save_run(run_id)
+            _push_event(run_id, "awaiting_hitl", {
+                "candidats": candidats_en_attente,
+                "next_node": state.next[0] if state.next else None,
+            })
+
+            # Attente bloquante de la décision humaine
+            hitl_event: threading.Event = _runs[run_id]["_hitl_event"]
+            got_decision = hitl_event.wait(timeout=_HITL_TIMEOUT)
+            if not got_decision:
+                raise TimeoutError(
+                    f"Aucune décision HITL reçue en {_HITL_TIMEOUT}s, run abandonné."
+                )
+
+            decision = _runs[run_id]["_hitl_decision"]
+            log.info("Run %s : décision HITL reçue : %s", run_id, decision["action"])
+            _push_event(run_id, "hitl_decision", {"action": decision["action"]})
+
+            # Application de la décision sur l'état du graphe
+            if decision["action"] == "skip":
+                # Marquer tous les candidats invalides → A7 ne contactera personne,
+                # A8 ne les persistera pas (cf. filtre par statut).
+                modifies = [
+                    {**c, "statut": "invalide", "remarques": "Rejeté par HITL"}
+                    for c in candidats_en_attente
+                ]
+                app_graph.update_state(config, {"candidats_valides": modifies})
+            elif decision["action"] == "edit":
+                app_graph.update_state(
+                    config, {"candidats_valides": decision.get("candidats_retenus", [])}
+                )
+            # "approve" → on reprend tel quel
+
+            _runs[run_id]["status"] = "running"
+            _save_run(run_id)
+
+            # --- Reprise du graphe après la décision ---
+            for event in app_graph.stream(None, config=config, stream_mode="updates"):
+                for node_name, payload in event.items():
+                    log.info("Run %s : nœud [%s] terminé (post-HITL).", run_id, node_name)
+                    _push_event(run_id, "node_completed", {
+                        "node": node_name,
+                        "summary": _resume_payload(payload),
+                    })
+
+        # --- État final ---
         final_state = app_graph.get_state(config)
         rapport = final_state.values.get("rapport_final", "")
         candidats = final_state.values.get("candidats_valides", [])
@@ -111,6 +342,11 @@ def _run_pipeline(run_id: str, fiche_poste: str, with_interrupt: bool) -> None:
             "rapport": rapport,
             "candidats": candidats,
             "finished_at": datetime.now(timezone.utc).isoformat(),
+        })
+        _save_run(run_id)
+        _push_event(run_id, "run_done", {
+            "rapport_chars": len(rapport),
+            "candidats": len(candidats),
         })
         log.info("Run %s : pipeline terminé avec succès.", run_id)
 
@@ -122,6 +358,97 @@ def _run_pipeline(run_id: str, fiche_poste: str, with_interrupt: bool) -> None:
             "erreur": str(exc),
             "finished_at": datetime.now(timezone.utc).isoformat(),
         })
+        _save_run(run_id)
+        _push_event(run_id, "run_error", {"erreur": str(exc)})
+    finally:
+        _close_event_stream(run_id)
+
+
+def _resume_payload(payload) -> dict:
+    """Résumé court d'un payload de nœud pour l'émission SSE.
+
+    Les payloads bruts peuvent contenir des listes longues ou des textes
+    volumineux ; on ne renvoie qu'un aperçu numérique/textuel par clé.
+    """
+    if not isinstance(payload, dict):
+        return {}
+    resume = {}
+    for key, value in payload.items():
+        if isinstance(value, list):
+            resume[key] = f"list({len(value)})"
+        elif isinstance(value, str):
+            resume[key] = value[:80]
+        elif isinstance(value, dict):
+            resume[key] = f"dict({len(value)})"
+        else:
+            resume[key] = str(value)[:80]
+    return resume
+
+
+def _metrics_snapshot() -> dict:
+    """Retourne un snapshot non destructif des métriques en mémoire."""
+    metrics = get_metrics()
+    started = getattr(metrics, "_debut_run", datetime.now().timestamp())
+    return {
+        "run_id": getattr(metrics, "_run_id", None),
+        "duree_totale_s": round(datetime.now().timestamp() - started, 2),
+        "etapes": getattr(metrics, "_etapes", {}),
+    }
+
+
+def _load_metrics_history(limit: int = _METRICS_HISTORY_LIMIT) -> list[dict]:
+    """Charge les derniers exports JSON de métriques depuis logs/."""
+    if not _LOGS_DIR.exists():
+        return []
+
+    history: list[dict] = []
+    files = sorted(_LOGS_DIR.glob("metriques_*.json"), reverse=True)[:limit]
+    for path in files:
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                payload = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        payload["_file"] = path.name
+        history.append(payload)
+    return history
+
+
+def _rag_counts() -> dict:
+    """Compte les collections ChromaDB sans initialiser SentenceTransformer."""
+    if not _CHROMA_DIR.exists():
+        return {
+            "available": False,
+            "persist_dir": str(_CHROMA_DIR),
+            "candidats": 0,
+            "fiches_poste": 0,
+            "error": None,
+        }
+
+    try:
+        import chromadb
+
+        client = chromadb.PersistentClient(path=str(_CHROMA_DIR))
+        candidats = client.get_or_create_collection("candidats_evalues").count()
+        fiches = client.get_or_create_collection("fiches_poste").count()
+        return {
+            "available": True,
+            "persist_dir": str(_CHROMA_DIR),
+            "candidats": candidats,
+            "fiches_poste": fiches,
+            "error": None,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "available": False,
+            "persist_dir": str(_CHROMA_DIR),
+            "candidats": 0,
+            "fiches_poste": 0,
+            "error": str(exc),
+        }
+
+
+_load_runs_from_db()
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +459,9 @@ def _run_pipeline(run_id: str, fiche_poste: str, with_interrupt: bool) -> None:
 async def health() -> JSONResponse:
     """Vérifie que le service est disponible."""
     runs_total = len(_runs)
-    runs_running = sum(1 for r in _runs.values() if r["status"] == "running")
+    runs_running = sum(
+        1 for r in _runs.values() if r["status"] in ("running", "awaiting_hitl")
+    )
     return JSONResponse({
         "status": "ok",
         "runs_total": runs_total,
@@ -141,7 +470,9 @@ async def health() -> JSONResponse:
 
 
 @app.post("/recruter", response_model=RecruterResponse, tags=["Pipeline"])
-async def recruter(req: RecruterRequest, background_tasks: BackgroundTasks) -> RecruterResponse:
+async def recruter(
+    req: RecruterRequest, background_tasks: BackgroundTasks
+) -> RecruterResponse:
     """Lance un nouveau pipeline de recrutement.
 
     - **fiche_poste** : description du poste à pourvoir
@@ -160,9 +491,15 @@ async def recruter(req: RecruterRequest, background_tasks: BackgroundTasks) -> R
         "erreur": None,
         "started_at": datetime.now(timezone.utc).isoformat(),
         "finished_at": None,
+        # Champs internes pour SSE et HITL
+        "_event_queue": queue.Queue(),
+        "_hitl_event": threading.Event(),
+        "_hitl_decision": {},
+        "_candidats_pending_hitl": [],
+        "_with_interrupt": not req.no_interrupt,
     }
+    _save_run(run_id)
 
-    # Lancer le pipeline en tâche de fond (thread pool, non-bloquant)
     background_tasks.add_task(
         _run_pipeline,
         run_id,
@@ -179,12 +516,7 @@ async def recruter(req: RecruterRequest, background_tasks: BackgroundTasks) -> R
 
 @app.get("/rapport/{run_id}", response_model=RapportResponse, tags=["Pipeline"])
 async def get_rapport(run_id: str) -> RapportResponse:
-    """Récupère le rapport d'un run de recrutement.
-
-    - **status** : `running` | `done` | `error`
-    - **rapport** : texte du rapport final (disponible quand `status=done`)
-    - **candidats** : liste des candidats validés avec scores
-    """
+    """Récupère le rapport d'un run de recrutement."""
     if run_id not in _runs:
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' introuvable.")
 
@@ -214,3 +546,140 @@ async def list_runs() -> JSONResponse:
     ]
     summary.sort(key=lambda x: x["started_at"] or "", reverse=True)
     return JSONResponse({"runs": summary, "total": len(summary)})
+
+
+@app.get("/metrics", tags=["Monitoring"])
+async def get_metrics_summary(
+    limit: int = Query(default=_METRICS_HISTORY_LIMIT, ge=1, le=100),
+) -> JSONResponse:
+    """Retourne les métriques en mémoire et les derniers exports JSON."""
+    return JSONResponse({
+        "current": _metrics_snapshot(),
+        "history": _load_metrics_history(limit),
+    })
+
+
+@app.get("/rag", tags=["Monitoring"])
+async def get_rag_summary() -> JSONResponse:
+    """Retourne l'état de la mémoire RAG locale."""
+    return JSONResponse(_rag_counts())
+
+
+@app.get("/rag/search", tags=["Monitoring"])
+async def search_rag(
+    q: str = Query(..., min_length=1),
+    fiche_poste: Optional[str] = Query(default=None),
+    n: int = Query(default=5, ge=1, le=20),
+) -> JSONResponse:
+    """Recherche des profils similaires dans ChromaDB.
+
+    Cet endpoint initialise SentenceTransformer uniquement sur demande,
+    car le chargement du modèle peut être coûteux.
+    """
+    try:
+        from src.tools.rag import get_memoire
+
+        results = get_memoire().rechercher_similaires(
+            profil_brut=q,
+            fiche_poste=fiche_poste,
+            n_results=n,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return JSONResponse({"results": results, "total": len(results)})
+
+
+@app.get("/runs/{run_id}/stream", tags=["Pipeline"])
+async def stream_run(run_id: str) -> StreamingResponse:
+    """Flux Server-Sent Events (SSE) des événements du pipeline.
+
+    Événements typés :
+        run_started     — début du pipeline
+        node_completed  — fin d'un nœud du graphe (payload résumé)
+        awaiting_hitl   — interrupt avant A7, candidats en attente
+        hitl_decision   — décision humaine reçue
+        run_done        — pipeline terminé, rapport prêt
+        run_error       — erreur fatale
+
+    Format respecté : `event: <type>\\ndata: <json>\\n\\n`.
+    """
+    if run_id not in _runs:
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' introuvable.")
+
+    q: queue.Queue = _runs[run_id]["_event_queue"]
+
+    async def event_generator():
+        if _runs[run_id]["status"] in ("done", "error") and q.empty():
+            yield "event: stream_closed\ndata: {}\n\n"
+            return
+        # Petit délai de polling : compromis latence/CPU. 100 ms suffisent
+        # pour une UI temps réel et évitent de saturer un worker.
+        while True:
+            try:
+                event = q.get_nowait()
+            except queue.Empty:
+                await asyncio.sleep(0.1)
+                continue
+            if event is None:
+                # Sentinel de fin : terminer proprement le flux.
+                yield "event: stream_closed\ndata: {}\n\n"
+                break
+            yield (
+                f"event: {event['type']}\n"
+                f"data: {json.dumps(event['data'], ensure_ascii=False)}\n\n"
+            )
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # désactive le buffering côté proxy nginx
+        },
+    )
+
+
+@app.post("/runs/{run_id}/hitl", tags=["Pipeline"])
+async def submit_hitl(run_id: str, decision: HitlDecision) -> JSONResponse:
+    """Transmet une décision humaine pour reprendre un run interrompu.
+
+    - **action** : `approve` (reprend tel quel), `skip` (ne contacte aucun
+      candidat), `edit` (remplace la liste de candidats validés).
+    - **candidats_retenus** : requis si `action == "edit"`, doit être une
+      liste de candidats au format `CandidatValide`.
+    """
+    if run_id not in _runs:
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' introuvable.")
+
+    info = _runs[run_id]
+    if info["status"] != "awaiting_hitl":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Run '{run_id}' n'est pas en attente de décision (statut: {info['status']}).",
+        )
+
+    if decision.action not in ("approve", "skip", "edit"):
+        raise HTTPException(
+            status_code=422,
+            detail="action doit être parmi : approve, skip, edit.",
+        )
+
+    if decision.action == "edit" and decision.candidats_retenus is None:
+        raise HTTPException(
+            status_code=422,
+            detail="candidats_retenus est requis pour action=edit.",
+        )
+
+    info["_hitl_decision"] = {
+        "action": decision.action,
+        "candidats_retenus": decision.candidats_retenus or [],
+    }
+    info["_hitl_event"].set()
+    _save_run(run_id)
+
+    return JSONResponse({
+        "run_id": run_id,
+        "action": decision.action,
+        "message": "Décision prise en compte, reprise du pipeline en cours.",
+    })

@@ -69,7 +69,8 @@ def route_to_evaluateurs(state: GraphState) -> list[Send]:
     return [
         Send("evaluateur", {
             "candidat": candidat,
-            "profil_competences": state["profil_competences"]
+            "profil_competences": state["profil_competences"],
+            "fiche_poste": state.get("fiche_poste", ""),
         })
         for candidat in profils
     ]

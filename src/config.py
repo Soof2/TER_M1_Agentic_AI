@@ -7,6 +7,10 @@ Créer un fichier .env (voir .env.example) pour la configuration locale.
 
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # ---------------------------------------------------------------------------
 # Modèle LLM
 # ---------------------------------------------------------------------------

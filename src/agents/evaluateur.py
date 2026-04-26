@@ -29,19 +29,25 @@ def evaluateur_node(state: dict) -> dict:
     """
     candidat = state["candidat"]
     profil = state["profil_competences"]
+    fiche_poste = state.get("fiche_poste", "")
     log = get_logger("A4_evaluateur")
     m = get_metrics()
     m.debut(f"A4_{candidat['id']}")
 
     log.info("Évaluation de : %s (source: %s)", candidat['nom'], candidat['source'])
 
-    # --- Contexte RAG : profils similaires des runs précédents ---
+    # --- Contexte RAG : profils similaires, restreints aux fiches de poste
+    # comparables à la fiche courante (évite la calibration inter-postes). ---
     contexte_rag = ""
     try:
         memoire = get_memoire()
-        similaires = memoire.rechercher_similaires(candidat["profil_brut"], n_results=2)
+        similaires = memoire.rechercher_similaires(
+            candidat["profil_brut"],
+            fiche_poste=fiche_poste if fiche_poste else None,
+            n_results=2,
+        )
         if similaires:
-            lignes = ["Profils similaires évalués lors de runs précédents (à titre de référence) :"]
+            lignes = ["Profils similaires évalués pour un poste comparable (à titre de référence) :"]
             for s in similaires:
                 lignes.append(
                     f"  - {s['nom']} | score={s['score']}/100 | similarité={s['similarite']} | {s['remarques'][:100]}"

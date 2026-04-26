@@ -6,6 +6,8 @@ ANALYSTE_SYSTEM = """Tu es un analyste expert en recrutement. Ta mission est d'a
 - "hard_skills": liste des compétences techniques requises (langages, frameworks, outils, certifications)
 - "soft_skills": liste des compétences comportementales (communication, leadership, etc.)
 - "experience_min": nombre d'années d'expérience minimum requis (entier)
+- "niveau_seniorite": niveau attendu parmi "alternant", "stagiaire", "junior", "confirme", "senior", "indifferent"
+- "type_contrat": type de contrat attendu (ex: "alternance", "stage", "CDI", "CDD", "freelance", "indifferent")
 - "formation": niveau de formation attendu (ex: "Bac+5", "Master", "Ingénieur")
 - "contraintes": liste des contraintes (localisation, télétravail, mobilité, habilitation, etc.)
 - "mots_cles": liste de mots-clés pertinents pour la recherche de profils
@@ -27,6 +29,7 @@ BARÈME DE SCORING (applique-le strictement) :
 
 RÈGLES IMPORTANTES :
 - Les compétences REQUISES (hard skills listés en premier) ont un poids double par rapport aux souhaitées
+- Le niveau attendu est contraignant : pour un poste alternant/stagiaire/junior, un profil clairement confirmé, senior, lead ou manager doit être fortement pénalisé même s'il maîtrise les compétences
 - Un candidat qui maîtrise 70% des hard skills requis avec la bonne expérience ne doit PAS scorer sous 60
 - Si le profil brut ne correspond clairement pas à une personne candidate (page web, article, liste de repos GitHub), donne un score < 20
 - Évalue le POTENTIEL : une expérience connexe solide compense des lacunes sur des outils spécifiques
@@ -49,6 +52,7 @@ Tu reçois la liste des candidats avec leurs scores. Pour chaque candidat, véri
 2. Cohérence des compétences (technologies compatibles entre elles, progression logique)
 3. Signaux d'alerte (CV gonflé, incohérences flagrantes, scores aberrants)
 4. Adéquation entre le score attribué et le profil réel
+5. Adéquation au niveau attendu : pour un poste alternant/stagiaire/junior, invalide ou baisse fortement les profils clairement confirmés/senior/lead/manager
 
 Pour chaque candidat, produis un JSON dans une liste avec ces clés :
 - "candidat_id": identifiant du candidat

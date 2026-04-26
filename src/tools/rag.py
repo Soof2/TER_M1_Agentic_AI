@@ -1,18 +1,27 @@
 """
-Mémoire RAG — Stockage vectoriel des candidats évalués.
+Mémoire RAG — Stockage vectoriel des candidats évalués, calibré par fiche de poste.
 
 Utilise ChromaDB (local, gratuit, aucun serveur requis) avec
 SentenceTransformers pour les embeddings (all-MiniLM-L6-v2, ~80 MB).
 
+Deux collections :
+    - fiches_poste       : embeddings des fiches de poste passées
+    - candidats_evalues  : embeddings des profils, reliés à leur fiche via fiche_id
+
 Rôle dans le pipeline :
-    Écriture : après chaque run, le nœud Persistance (A8) stocke
-               les candidats validés avec leur score et remarques.
-    Lecture  : avant chaque évaluation, A4 récupère les profils
-               similaires pour enrichir son contexte de scoring.
+    Écriture (A8) : on upsert la fiche courante, puis chaque candidat validé
+                    avec un lien vers cette fiche.
+    Lecture  (A4) : on cherche d'abord les fiches similaires à la fiche
+                    courante (au-dessus d'un seuil de similarité). Si aucune
+                    fiche comparable n'existe, on ne renvoie RIEN (éviter
+                    le biais de calibration inter-postes). Sinon, on
+                    restreint la recherche des candidats similaires aux
+                    seules fiches pertinentes.
 
 Persistence : ./data/chromadb/  (créé automatiquement au premier run)
 """
 
+import hashlib
 import os
 import chromadb
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
@@ -21,30 +30,95 @@ from src.logger import get_logger
 _log = get_logger("tools.rag")
 
 _PERSIST_DIR = os.getenv("CHROMADB_DIR", "./data/chromadb")
-_COLLECTION_NAME = "candidats_evalues"
+_CANDIDATS_COLLECTION = "candidats_evalues"
+_FICHES_COLLECTION = "fiches_poste"
 _EMBED_MODEL = "all-MiniLM-L6-v2"   # ~80 MB, téléchargé une seule fois
+
+# Seuil de similarité fiche↔fiche au-dessus duquel on considère qu'une fiche
+# stockée est suffisamment proche de la fiche courante pour que ses candidats
+# soient une référence de calibration légitime.
+_SEUIL_FICHE_DEFAUT = 0.5
+
+
+def hash_fiche(texte: str) -> str:
+    """Hash stable d'une fiche de poste — sert d'identifiant déterministe.
+
+    Même texte (au whitespace près) → même id, ce qui garantit l'idempotence
+    du upsert si la même fiche est passée deux fois.
+    """
+    normalise = " ".join(texte.split()).lower()
+    return hashlib.sha1(normalise.encode("utf-8")).hexdigest()[:12]
 
 
 class MemoireRAG:
-    """Interface ChromaDB pour la mémoire vectorielle des candidats."""
+    """Interface ChromaDB pour la mémoire vectorielle, calibrée par fiche."""
 
     def __init__(self, persist_dir: str = _PERSIST_DIR):
         os.makedirs(persist_dir, exist_ok=True)
         self._client = chromadb.PersistentClient(path=persist_dir)
-        self._ef = SentenceTransformerEmbeddingFunction(model_name=_EMBED_MODEL)
-        self._collection = self._client.get_or_create_collection(
-            name=_COLLECTION_NAME,
-            embedding_function=self._ef,
-            metadata={"hnsw:space": "cosine"},
-        )
+        self._ef = None
+        self._candidats = self._open_collection(_CANDIDATS_COLLECTION)
+        self._fiches = self._open_collection(_FICHES_COLLECTION)
         _log.info(
-            "Mémoire RAG initialisée (%d candidats en base) → %s",
-            self._collection.count(), persist_dir,
+            "Mémoire RAG initialisée (%d candidats, %d fiches) → %s",
+            self._candidats.count(), self._fiches.count(), persist_dir,
         )
+
+    def _open_collection(self, name: str):
+        """Ouvre une collection avec SentenceTransformer, ou réutilise
+        l'embedding function persistée si la base existe déjà.
+
+        ChromaDB persiste la configuration d'embedding. Une base créée avec
+        l'embedding par défaut refuse ensuite `SentenceTransformer`, ce qui
+        ne doit pas bloquer le pipeline : dans ce cas, on garde l'existant.
+        """
+        try:
+            return self._client.get_collection(name)
+        except Exception:  # noqa: BLE001
+            pass
+
+        if self._ef is None:
+            self._ef = SentenceTransformerEmbeddingFunction(model_name=_EMBED_MODEL)
+
+        try:
+            return self._client.get_or_create_collection(
+                name=name,
+                embedding_function=self._ef,
+                metadata={"hnsw:space": "cosine"},
+            )
+        except Exception as exc:  # noqa: BLE001
+            message = str(exc).lower()
+            if "embedding function conflict" not in message:
+                raise
+            _log.warning(
+                "Collection ChromaDB '%s' déjà créée avec une autre embedding function ; "
+                "réouverture avec sa configuration persistée.",
+                name,
+            )
+            return self._client.get_collection(name)
 
     # ------------------------------------------------------------------
     # Écriture
     # ------------------------------------------------------------------
+
+    def ajouter_fiche_poste(self, fiche_texte: str) -> str:
+        """Upsert la fiche de poste dans la collection dédiée.
+
+        Retourne le fiche_id (hash) qui servira à rattacher les candidats.
+        """
+        if not fiche_texte or not fiche_texte.strip():
+            return ""
+        fiche_id = hash_fiche(fiche_texte)
+        document = fiche_texte[:3000]
+        try:
+            self._fiches.upsert(
+                ids=[fiche_id],
+                documents=[document],
+                metadatas=[{"longueur": len(fiche_texte)}],
+            )
+        except Exception as e:
+            _log.warning("Erreur upsert fiche_poste : %s", e)
+        return fiche_id
 
     def ajouter_candidat(
         self,
@@ -54,24 +128,30 @@ class MemoireRAG:
         score: float,
         source: str,
         remarques: str = "",
+        fiche_id: str = "",
     ) -> None:
         """Stocke un candidat évalué dans la base vectorielle.
 
-        Si le candidat existe déjà (même ID), il est mis à jour.
+        Le champ fiche_id rattache le candidat à la fiche de poste pour
+        laquelle il a été évalué : c'est ce qui permet à la lecture
+        ultérieure de ne remonter que des candidats évalués dans un
+        contexte de poste comparable.
         """
-        # ChromaDB exige des documents non vides
         document = profil_brut[:2000] if profil_brut.strip() else f"Profil de {nom}"
 
+        metadata = {
+            "nom": nom,
+            "score": score,
+            "source": source,
+            "remarques": remarques[:500],
+            "fiche_id": fiche_id,
+        }
+
         try:
-            self._collection.upsert(
+            self._candidats.upsert(
                 ids=[candidat_id],
                 documents=[document],
-                metadatas=[{
-                    "nom": nom,
-                    "score": score,
-                    "source": source,
-                    "remarques": remarques[:500],
-                }],
+                metadatas=[metadata],
             )
         except Exception as e:
             _log.warning("Erreur upsert ChromaDB pour %s : %s", nom, e)
@@ -80,34 +160,84 @@ class MemoireRAG:
     # Lecture
     # ------------------------------------------------------------------
 
-    def rechercher_similaires(
-        self, profil_brut: str, n_results: int = 3
-    ) -> list[dict]:
-        """Recherche les candidats les plus similaires au profil donné.
+    def _fiches_similaires_ids(
+        self, fiche_texte: str, seuil: float, n_max: int = 3
+    ) -> list[str]:
+        """Retourne les fiche_ids dont la similarité cosine avec la fiche
+        courante dépasse le seuil. Liste vide si aucune fiche comparable.
+        """
+        total = self._fiches.count()
+        if total == 0 or not fiche_texte.strip():
+            return []
 
-        Args:
-            profil_brut: Texte du profil candidat à comparer.
-            n_results: Nombre max de résultats.
+        n = min(n_max, total)
+        try:
+            results = self._fiches.query(
+                query_texts=[fiche_texte[:3000]],
+                n_results=n,
+                include=["distances"],
+            )
+        except Exception as e:
+            _log.warning("Erreur query fiches_poste : %s", e)
+            return []
+
+        ids = results.get("ids", [[]])[0]
+        distances = results.get("distances", [[]])[0]
+        retenus = [
+            fid for fid, dist in zip(ids, distances)
+            if (1 - dist) >= seuil
+        ]
+        return retenus
+
+    def rechercher_similaires(
+        self,
+        profil_brut: str,
+        fiche_poste: str | None = None,
+        n_results: int = 3,
+        seuil_fiche: float = _SEUIL_FICHE_DEFAUT,
+    ) -> list[dict]:
+        """Recherche les candidats les plus similaires au profil donné,
+        restreinte aux fiches de poste comparables à la fiche courante.
+
+        Si fiche_poste est None → comportement legacy (recherche globale,
+        sans filtrage par contexte de poste). Conservé pour rétrocompat.
+
+        Si fiche_poste est fourni mais aucune fiche stockée n'atteint
+        seuil_fiche, retourne [] plutôt que d'injecter un signal de
+        calibration hors-contexte.
 
         Returns:
-            Liste de dicts {nom, score, source, remarques, distance}.
-            Liste vide si la base est vide ou si la recherche échoue.
+            Liste de dicts {nom, score, source, remarques, similarite}.
         """
-        total = self._collection.count()
+        total = self._candidats.count()
         if total == 0:
             return []
 
         n = min(n_results, total)
         query = profil_brut[:2000] if profil_brut.strip() else "profil développeur"
 
+        where_clause: dict | None = None
+        if fiche_poste is not None:
+            fiche_ids = self._fiches_similaires_ids(fiche_poste, seuil_fiche)
+            if not fiche_ids:
+                _log.info(
+                    "RAG : aucune fiche stockée au-dessus du seuil %.2f → contexte non injecté.",
+                    seuil_fiche,
+                )
+                return []
+            where_clause = {"fiche_id": {"$in": fiche_ids}}
+
         try:
-            results = self._collection.query(
-                query_texts=[query],
-                n_results=n,
-                include=["metadatas", "distances"],
-            )
+            kwargs = {
+                "query_texts": [query],
+                "n_results": n,
+                "include": ["metadatas", "distances"],
+            }
+            if where_clause is not None:
+                kwargs["where"] = where_clause
+            results = self._candidats.query(**kwargs)
         except Exception as e:
-            _log.warning("Erreur query ChromaDB : %s", e)
+            _log.warning("Erreur query candidats : %s", e)
             return []
 
         similaires = []
@@ -120,14 +250,18 @@ class MemoireRAG:
                 "score": meta.get("score", 0),
                 "source": meta.get("source", "?"),
                 "remarques": meta.get("remarques", ""),
-                "similarite": round(1 - dist, 3),   # cosine distance → similarité
+                "similarite": round(1 - dist, 3),
             })
 
         return similaires
 
     def compter(self) -> int:
         """Retourne le nombre total de candidats en base."""
-        return self._collection.count()
+        return self._candidats.count()
+
+    def compter_fiches(self) -> int:
+        """Retourne le nombre de fiches de poste stockées."""
+        return self._fiches.count()
 
 
 # ---------------------------------------------------------------------------

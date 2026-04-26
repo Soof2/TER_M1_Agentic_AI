@@ -21,22 +21,41 @@ _log = get_logger("A8_persistance")
 
 
 def persistance_node(state: GraphState) -> dict:
-    """Stocke les candidats validés dans la mémoire vectorielle."""
+    """Stocke la fiche de poste courante + les candidats validés,
+    reliés via un fiche_id stable. Le lien fiche↔candidat permet à A4
+    de filtrer les runs précédents par pertinence de contexte."""
     m = get_metrics()
     m.debut("A8_persistance")
 
     candidats_valides = state.get("candidats_valides", [])
     profils_dedupliques = state.get("profils_dedupliques", [])
+    fiche_poste = state.get("fiche_poste", "")
 
     if not candidats_valides:
         _log.info("Aucun candidat validé à persister.")
         m.fin("A8_persistance", n_persistes=0)
         return {}
 
+    try:
+        memoire = get_memoire()
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("Mémoire RAG indisponible, persistance ignorée : %s", exc)
+        m.fin("A8_persistance", n_persistes=0, rag_error=str(exc)[:200])
+        return {}
+
+    # Upsert de la fiche courante — renvoie un hash stable
+    try:
+        fiche_id = memoire.ajouter_fiche_poste(fiche_poste)
+        if fiche_id:
+            _log.info("Fiche de poste persistée (fiche_id=%s).", fiche_id)
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("Erreur persistance fiche RAG, persistance ignorée : %s", exc)
+        m.fin("A8_persistance", n_persistes=0, rag_error=str(exc)[:200])
+        return {}
+
     # Index profils bruts par ID pour récupérer le texte
     profils_idx = {p["id"]: p for p in profils_dedupliques}
 
-    memoire = get_memoire()
     n_persistes = 0
 
     for candidat in candidats_valides:
@@ -48,20 +67,29 @@ def persistance_node(state: GraphState) -> dict:
         profil_brut = profil.get("profil_brut", f"Profil de {candidat['nom']}")
         source = profil.get("source", "inconnu")
 
-        memoire.ajouter_candidat(
-            candidat_id=candidat["candidat_id"],
-            nom=candidat["nom"],
-            profil_brut=profil_brut,
-            score=candidat["score_final"],
-            source=source,
-            remarques=candidat.get("remarques", ""),
-        )
-        n_persistes += 1
+        try:
+            memoire.ajouter_candidat(
+                candidat_id=candidat["candidat_id"],
+                nom=candidat["nom"],
+                profil_brut=profil_brut,
+                score=candidat["score_final"],
+                source=source,
+                remarques=candidat.get("remarques", ""),
+                fiche_id=fiche_id,
+            )
+            n_persistes += 1
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("Erreur persistance candidat %s : %s", candidat.get("nom", "?"), exc)
 
     _log.info(
-        "%d candidats persistés en base RAG (total base : %d).",
-        n_persistes, memoire.compter(),
+        "%d candidats persistés en base RAG (total : %d candidats, %d fiches).",
+        n_persistes, memoire.compter(), memoire.compter_fiches(),
     )
-    m.fin("A8_persistance", n_persistes=n_persistes, total_base=memoire.compter())
+    m.fin(
+        "A8_persistance",
+        n_persistes=n_persistes,
+        total_base=memoire.compter(),
+        total_fiches=memoire.compter_fiches(),
+    )
 
     return {}

@@ -20,6 +20,17 @@ from src.logger import get_logger
 _log = get_logger("A5_verificateur")
 
 
+def _profil_trop_experimente(profil_brut: str) -> bool:
+    """Détecte les signaux simples de profil trop senior pour alternance/junior."""
+    texte = profil_brut.lower()
+    marqueurs = (
+        "senior", "lead", "manager", "architecte", "principal",
+        "confirmé", "confirme", "head of", "cto", "directeur",
+        "10 ans", "10+ ans", "15 ans", "20 ans",
+    )
+    return any(m in texte for m in marqueurs)
+
+
 def verificateur_node(state: GraphState) -> dict:
     """Vérifie et valide les scores des candidats."""
     m = get_metrics()
@@ -39,6 +50,7 @@ def verificateur_node(state: GraphState) -> dict:
         profils_par_id[p["id"]] = p
 
     # Préparer les données complètes : scores + profils bruts
+    profil_requis = state.get("profil_competences", {})
     candidats_info = []
     for cs in candidats_scores:
         entry = {
@@ -59,6 +71,9 @@ def verificateur_node(state: GraphState) -> dict:
 - Le score et le résumé de l'évaluateur (A4)
 - Le profil brut original pour croiser les informations
 
+Profil requis :
+{json.dumps(profil_requis, ensure_ascii=False, indent=2)}
+
 Candidats :
 
 {json.dumps(candidats_info, ensure_ascii=False, indent=2)}
@@ -68,6 +83,7 @@ Pour chaque candidat, vérifie :
 2. Les dates suspectes (expérience irréaliste, chevauchements)
 3. Les CV gonflés (trop de compétences sans preuves, titres vagues)
 4. Les profils qui ne sont PAS des candidats (offres d'emploi, pages d'entreprise, agrégateurs)
+5. Le niveau attendu : si le profil requis indique alternant/stagiaire/junior, rejette ou baisse fortement les profils clairement confirmés/senior/lead/manager
 
 Invalide les profils qui ne sont clairement pas des candidats individuels.
 Marque comme "douteux" ceux avec des incohérences.
@@ -109,13 +125,28 @@ Ajuste le score_final si nécessaire."""
 
     # Construire les CandidatValide
     candidats_valides = []
+    profils_par_candidat_id = {
+        p["id"]: p.get("profil_brut", "")
+        for p in state.get("profils_dedupliques", [])
+    }
+    niveau_requis = profil_requis.get("niveau_seniorite", "indifferent")
     for v in validations:
+        candidat_id = v.get("candidat_id", "")
+        score_final = float(v.get("score_final", 0))
+        statut = v.get("statut", "douteux")
+        remarques = v.get("remarques", "")
+        if niveau_requis in ("alternant", "stagiaire", "junior") and _profil_trop_experimente(
+            profils_par_candidat_id.get(candidat_id, "")
+        ):
+            score_final = min(score_final, 45.0)
+            statut = "douteux" if statut == "valide" else statut
+            remarques = f"{remarques} Niveau trop expérimenté pour un poste {niveau_requis}.".strip()
         candidats_valides.append(CandidatValide(
-            candidat_id=v.get("candidat_id", ""),
+            candidat_id=candidat_id,
             nom=v.get("nom", ""),
-            score_final=float(v.get("score_final", 0)),
-            statut=v.get("statut", "douteux"),
-            remarques=v.get("remarques", "")
+            score_final=score_final,
+            statut=statut,
+            remarques=remarques
         ))
 
     n_valides = sum(1 for c in candidats_valides if c["statut"] == "valide")

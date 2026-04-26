@@ -56,6 +56,11 @@ L'agent Chercheur est divisé en trois agents spécialisés :
 - Export JSON automatique dans `logs/metriques_YYYYMMDD_HHMMSS.json`
 - Résumé inclus dans le rapport final
 
+### Persistance des runs
+- Les runs API sont persistés dans SQLite (`./data/runs.sqlite` par défaut)
+- L'historique reste disponible après redémarrage de l'API
+- Un run interrompu par redémarrage est marqué en erreur pour éviter un faux blocage
+
 ### API Gateway (FastAPI)
 Expose le SMA comme un service REST :
 
@@ -64,9 +69,23 @@ Expose le SMA comme un service REST :
 | `POST` | `/recruter` | Lance un pipeline avec une fiche de poste |
 | `GET` | `/rapport/{run_id}` | Récupère le rapport d'un run |
 | `GET` | `/runs` | Liste tous les runs |
+| `GET` | `/runs/{run_id}/stream` | Flux SSE live du pipeline |
+| `POST` | `/runs/{run_id}/hitl` | Décision human-in-the-loop |
+| `GET` | `/metrics` | Métriques courantes et exports JSON |
+| `GET` | `/rag` | État de la mémoire RAG |
 | `GET` | `/health` | Health check |
 
 Documentation interactive : `http://localhost:8000/docs`
+
+### Interface graphique (NiceGUI)
+Une UI web permet de lancer un run, suivre la timeline live, visualiser le graphe Mermaid, gérer le HITL, consulter les rapports, la mémoire RAG et les métriques.
+
+```bash
+OLLAMA_HOST=http://localhost:11434 uvicorn src.api:app --reload --port 8000
+API_URL=http://localhost:8000 python3 -m src.ui.app
+```
+
+Interface : `http://localhost:8080`
 
 ---
 
@@ -81,6 +100,7 @@ Documentation interactive : `http://localhost:8000/docs`
 | Recherche Stack Overflow | Stack Exchange API (gratuit) |
 | Mémoire vectorielle | ChromaDB + SentenceTransformers |
 | API REST | FastAPI + Uvicorn |
+| Interface graphique | NiceGUI |
 | Conteneurisation | Docker + docker-compose |
 
 ---
@@ -145,7 +165,15 @@ echo "OLLAMA_MODEL=mistral" > .env
 docker compose up --build
 ```
 
-L'API est accessible sur `http://localhost:8000`.
+L'API est accessible sur `http://localhost:8000` et l'UI sur `http://localhost:8080`.
+
+Si les ports locaux sont déjà utilisés par un lancement manuel :
+
+```bash
+API_PORT=8001 UI_PORT_HOST=8081 docker compose up --build
+```
+
+L'API Docker sera alors sur `http://localhost:8001` et l'UI Docker sur `http://localhost:8081`.
 
 ---
 
@@ -162,6 +190,7 @@ L'API est accessible sur `http://localhost:8000`.
 | `TOP_N_RELATIF` | `3` | Nombre de candidats en mode relatif |
 | `MAX_PROFILS_RECHERCHE` | `15` | Nombre max de profils collectés |
 | `MAX_PROFILS_PARALLELES` | `10` | Nombre max d'évaluateurs parallèles |
+| `RUNS_DB_PATH` | `data/runs.sqlite` | Base SQLite des runs API |
 
 ---
 

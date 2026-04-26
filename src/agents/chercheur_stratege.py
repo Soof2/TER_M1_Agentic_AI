@@ -32,6 +32,10 @@ _STRATEGE_PROMPT = """Tu es un expert en sourcing de talents. À partir du profi
 
 RÈGLE ABSOLUE : Utilise UNIQUEMENT les compétences, la localisation et l'expérience du profil fourni. N'invente PAS de compétences ou de localisations absentes du profil.
 
+RÈGLE DE NIVEAU : Respecte strictement le niveau attendu.
+- Si niveau_seniorite vaut "alternant" ou "stagiaire", cherche des profils étudiants, apprentis, juniors, école, master, Bac+3/Bac+5, et évite les requêtes qui attirent des profils senior/lead/confirmés.
+- Si niveau_seniorite vaut "senior" ou "confirme", utilise au contraire les termes senior/confirmé et l'expérience demandée.
+
 Produis un JSON avec exactement ces clés :
 - "queries_generales": liste de 2-3 requêtes web ciblant des CV ou portfolios.
   Utilise les compétences exactes avec des opérateurs comme intitle:CV ou les termes "portfolio" "profil" "expérience".
@@ -68,6 +72,8 @@ def stratege_node(state: GraphState) -> dict:
         f"Hard skills : {', '.join(profil.get('hard_skills', []))}\n"
         f"Soft skills : {', '.join(profil.get('soft_skills', []))}\n"
         f"Expérience minimum : {profil.get('experience_min', 0)} ans\n"
+        f"Niveau attendu : {profil.get('niveau_seniorite', 'indifferent')}\n"
+        f"Type de contrat : {profil.get('type_contrat', 'indifferent')}\n"
         f"Formation : {profil.get('formation', 'Non spécifié')}\n"
         f"Contraintes : {', '.join(profil.get('contraintes', []))}\n"
         f"Mots-clés : {', '.join(profil.get('mots_cles', []))}"
@@ -89,6 +95,10 @@ def stratege_node(state: GraphState) -> dict:
         # Fallback : requêtes génériques à partir des mots-clés
         mots = profil.get("mots_cles", profil.get("hard_skills", ["développeur"]))
         base = " ".join(mots[:5])
+        niveau = profil.get("niveau_seniorite", "indifferent")
+        contrat = profil.get("type_contrat", "indifferent")
+        if niveau in ("alternant", "stagiaire"):
+            base = f"{base} {contrat} {niveau} junior étudiant"
         requetes = {
             "queries_generales": [f'intitle:CV "{mots[0]}" {mots[1] if len(mots) > 1 else ""}'],
             "queries_linkedin": [f'site:linkedin.com/in {base}'],
@@ -97,6 +107,21 @@ def stratege_node(state: GraphState) -> dict:
             "tags_stackoverflow": [t.lower().replace(" ", "-") for t in mots[:3]],
         }
         _log.warning("JSON non parsable depuis le stratège — fallback requêtes génériques.")
+
+    niveau = profil.get("niveau_seniorite", "indifferent")
+    contrat = profil.get("type_contrat", "indifferent")
+    if niveau in ("alternant", "stagiaire"):
+        exclusions = '-"senior" -"lead" -"confirmé" -"confirme" -"manager"'
+        mots_niveau = f'"{contrat}" "{niveau}" junior étudiant'
+        for key in ("queries_generales", "queries_linkedin", "queries_cv_sites"):
+            requetes[key] = [
+                f"{q} {mots_niveau} {exclusions}"
+                for q in requetes.get(key, [])
+            ]
+        requetes["queries_github"] = [
+            f"{q} {niveau} junior student"
+            for q in requetes.get("queries_github", [])
+        ]
 
     n_requetes = sum(len(v) for v in requetes.values() if isinstance(v, list))
     _log.info(
