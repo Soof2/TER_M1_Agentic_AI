@@ -1,0 +1,108 @@
+\documentclass[11pt,a4paper,oneside]{report}
+
+% --- Encodage et langue ---------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% --- Mise en page ---------------------------------------------------------
+\usepackage[a4paper,margin=2.5cm,headheight=14pt]{geometry}
+\usepackage{fancyhdr}
+\usepackage{setspace}
+\onehalfspacing
+\setlength{\parskip}{0.4em}
+\setlength{\parindent}{0pt}
+
+% --- Typographie et symboles ---------------------------------------------
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{float}
+
+% --- Code source ---------------------------------------------------------
+\usepackage{listings}
+\definecolor{codegray}{rgb}{0.45,0.45,0.45}
+\definecolor{codekw}{rgb}{0.13,0.29,0.53}
+\definecolor{codestr}{rgb}{0.40,0.20,0.10}
+\definecolor{codecom}{rgb}{0.30,0.50,0.30}
+\definecolor{codebg}{rgb}{0.97,0.97,0.97}
+
+\lstdefinestyle{pycode}{
+    backgroundcolor=\color{codebg},
+    commentstyle=\color{codecom}\itshape,
+    keywordstyle=\color{codekw}\bfseries,
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codestr},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=8pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=4,
+    frame=single,
+    framerule=0.3pt,
+    rulecolor=\color{codegray},
+    xleftmargin=12pt,
+    aboveskip=10pt,
+    belowskip=10pt,
+}
+\lstset{style=pycode,language=Python,literate=
+    {é}{{\'e}}1 {è}{{\`e}}1 {ê}{{\^e}}1 {à}{{\`a}}1
+    {ô}{{\^o}}1 {ç}{{\c c}}1 {î}{{\^\i}}1 {ï}{{\"\i}}1
+    {ù}{{\`u}}1 {â}{{\^a}}1 {É}{{\'E}}1 {È}{{\`E}}1
+}
+
+% --- Liens et références --------------------------------------------------
+\usepackage[hidelinks,colorlinks=true,linkcolor=black,
+            citecolor=black,urlcolor=blue!50!black]{hyperref}
+\usepackage{url}
+
+% --- Bibliographie --------------------------------------------------------
+\usepackage[backend=bibtex,style=numeric,sorting=none]{biblatex}
+\addbibresource{biblio.bib}
+
+% --- En-têtes et pieds ----------------------------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\nouppercase{\leftmark}}
+\fancyhead[R]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\chaptermark}[1]{\markboth{\chaptername\ \thechapter\ -- #1}{}}
+
+% --- Métadonnées ----------------------------------------------------------
+\title{Système Multi-Agents pour le recrutement assisté par IA}
+\author{Anouar Soufyani \and [NOM\_2] \and [NOM\_3]}
+\date{Année universitaire 2025--2026}
+
+% ==========================================================================
+\begin{document}
+
+\input{garde}
+
+\pagenumbering{roman}
+\tableofcontents
+\cleardoublepage
+
+\pagenumbering{arabic}
+
+\input{chapitres/01_presentation}
+\input{chapitres/02_etat_art}
+\input{chapitres/03_choix_framework}
+\input{chapitres/04_cas_etude}
+\input{chapitres/05_analyse_systeme}
+\input{chapitres/06_conclusion}
+
+\printbibliography[heading=bibintoc,title={Bibliographie}]
+
+\end{document}
