@@ -1,0 +1,550 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.2 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated as
+% required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+\datalist[entry]{none/global//global/global}
+  \entry{dorri2018mas}{article}{}
+    \name{author}{3}{}{%
+      {{hash=DA}{%
+         family={Dorri},
+         familyi={D\bibinitperiod},
+         given={Ali},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=KSS}{%
+         family={Kanhere},
+         familyi={K\bibinitperiod},
+         given={Salil\bibnamedelima S.},
+         giveni={S\bibinitperiod\bibinitdelim S\bibinitperiod},
+      }}%
+      {{hash=JR}{%
+         family={Jurdak},
+         familyi={J\bibinitperiod},
+         given={Raja},
+         giveni={R\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{DAKSSJR1}
+    \strng{fullhash}{DAKSSJR1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{note}{Etude SMA 08 du dossier de recherche.}
+    \field{pages}{28573\bibrangedash 28593}
+    \field{title}{Multi-Agent Systems: {A} Survey}
+    \field{volume}{6}
+    \field{journaltitle}{IEEE Access}
+    \field{year}{2018}
+  \endentry
+
+  \entry{sma_general_survey}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=SG}{%
+         family={Survey},
+         familyi={S\bibinitperiod},
+         given={General},
+         giveni={G\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{SG1}
+    \strng{fullhash}{SG1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{note}{Etude SMA 04.}
+    \field{title}{General Survey on Multi-Agent Theory and Applications}
+    \field{year}{2023}
+  \endentry
+
+  \entry{sapkota2026}{misc}{}
+    \true{moreauthor}
+    \true{morelabelname}
+    \name{author}{1}{}{%
+      {{hash=S}{%
+         family={Sapkota},
+         familyi={S\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{S+1}
+    \strng{fullhash}{S+1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{note}{Etude Agentic AI 04.}
+    \field{title}{AI Agents vs Agentic AI}
+    \field{year}{2026}
+  \endentry
+
+  \entry{abouali2026}{misc}{}
+    \true{moreauthor}
+    \true{morelabelname}
+    \name{author}{1}{}{%
+      {{hash=AA}{%
+         family={Ali},
+         familyi={A\bibinitperiod},
+         given={Abou},
+         giveni={A\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{AA+1}
+    \strng{fullhash}{AA+1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{note}{Etude Agentic AI 02.}
+    \field{title}{A Comprehensive Survey on Agentic AI}
+    \field{year}{2026}
+  \endentry
+
+  \entry{sma_systemes}{misc}{}
+    \true{moreauthor}
+    \true{morelabelname}
+    \name{author}{1}{}{%
+      {{hash=MJ}{%
+         family={Maldonado},
+         familyi={M\bibinitperiod},
+         given={J.},
+         giveni={J\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{MJ+1}
+    \strng{fullhash}{MJ+1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{note}{Etude SMA 02 et 07.}
+    \field{title}{Systèmes multiagents : architectures et propriétés}
+    \field{year}{2024}
+  \endentry
+
+  \entry{fipa_acl}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=F}{%
+         family={{FIPA}},
+         familyi={F\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{F1}
+    \strng{fullhash}{F1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{http://www.fipa.org/repository/aclspecs.html}}
+    \field{title}{{FIPA} Agent Communication Language Specifications}
+    \field{year}{2002}
+  \endentry
+
+  \entry{sma_cmu_marl}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=C}{%
+         family={CMU},
+         familyi={C\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{C2}
+    \strng{fullhash}{C2}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{note}{Etude SMA 05.}
+    \field{title}{Multi-Agent Reinforcement Learning : a Machine Learning
+  Perspective}
+    \field{year}{2022}
+  \endentry
+
+  \entry{sma_visual_survey}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=oABCVS}{%
+         prefix={of},
+         prefixi={o\bibinitperiod},
+         family={Agent-Based\bibnamedelima Computing},
+         familyi={A\bibinithyphendelim B\bibinitperiod\bibinitdelim
+  C\bibinitperiod},
+         given={Visual\bibnamedelima Survey},
+         giveni={V\bibinitperiod\bibinitdelim S\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{ABCVSo1}
+    \strng{fullhash}{ABCVSo1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{note}{Etude SMA 03.}
+    \field{title}{A Visual Survey of Agent-Based Computing}
+    \field{year}{2023}
+  \endentry
+
+  \entry{sma_wjarr}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=W}{%
+         family={WJARR},
+         familyi={W\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{W3}
+    \strng{fullhash}{W3}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{note}{Etude SMA 06.}
+    \field{title}{Future of Distributed Artificial Intelligence and Multi-Agent
+  Systems}
+    \field{year}{2024}
+  \endentry
+
+  \entry{schneider2025}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=S}{%
+         family={Schneider},
+         familyi={S\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{S1}
+    \strng{fullhash}{S1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{note}{Etude Agentic AI 10.}
+    \field{title}{From Generative to Agentic : a paradigm shift}
+    \field{year}{2025}
+  \endentry
+
+  \entry{milosevic_rabhi}{misc}{}
+    \name{author}{2}{}{%
+      {{hash=M}{%
+         family={Milosevic},
+         familyi={M\bibinitperiod},
+      }}%
+      {{hash=R}{%
+         family={Rabhi},
+         familyi={R\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{MR1}
+    \strng{fullhash}{MR1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{note}{Etude Agentic AI 09.}
+    \field{title}{Agentic Communities : hybrid human-AI ecosystems}
+    \field{year}{2026}
+  \endentry
+
+  \entry{pati2025}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=P}{%
+         family={Pati},
+         familyi={P\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{P1}
+    \strng{fullhash}{P1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{note}{Etude Agentic AI 06.}
+    \field{title}{Agentic AI : Technologies and Societal Implications}
+    \field{year}{2025}
+  \endentry
+
+  \entry{agentic_wavestone_playbook}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=W}{%
+         family={{Wavestone}},
+         familyi={W\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{W2}
+    \strng{fullhash}{W2}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{note}{Etude Agentic AI 01.}
+    \field{title}{Agentic AI Playbook}
+    \field{year}{2024}
+  \endentry
+
+  \entry{alva_pandey}{misc}{}
+    \name{author}{2}{}{%
+      {{hash=A}{%
+         family={Alva},
+         familyi={A\bibinitperiod},
+      }}%
+      {{hash=P}{%
+         family={Pandey},
+         familyi={P\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{AP1}
+    \strng{fullhash}{AP1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{note}{Etude Agentic AI 03 et 10.}
+    \field{title}{Age of Generative Models : the rise of Agentic Systems}
+    \field{year}{2025}
+  \endentry
+
+  \entry{vaidhyanathan_taibi}{misc}{}
+    \name{author}{2}{}{%
+      {{hash=V}{%
+         family={Vaidhyanathan},
+         familyi={V\bibinitperiod},
+      }}%
+      {{hash=T}{%
+         family={Taibi},
+         familyi={T\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{VT1}
+    \strng{fullhash}{VT1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{note}{Etude Agentic AI 07.}
+    \field{title}{A Critical Analysis of Agentic AI Frameworks}
+    \field{year}{2026}
+  \endentry
+
+  \entry{hughes2025}{misc}{}
+    \true{moreauthor}
+    \true{morelabelname}
+    \name{author}{1}{}{%
+      {{hash=H}{%
+         family={Hughes},
+         familyi={H\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{H+1}
+    \strng{fullhash}{H+1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{note}{Etude Agentic AI 11.}
+    \field{title}{AI Agents and Agentic Systems : a structured review}
+    \field{year}{2025}
+  \endentry
+
+  \entry{tosem2025}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=T}{%
+         family={{TOSEM}},
+         familyi={T\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{T1}
+    \strng{fullhash}{T1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{note}{Etude Agentic AI 08.}
+    \field{title}{A Year in TOSEM : Agentic Software Engineering}
+    \field{year}{2025}
+  \endentry
+
+  \entry{patel2025}{misc}{}
+    \true{moreauthor}
+    \true{morelabelname}
+    \name{author}{1}{}{%
+      {{hash=P}{%
+         family={Patel},
+         familyi={P\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{P+1}
+    \strng{fullhash}{P+1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{note}{Etude Agentic AI 05.}
+    \field{title}{A Systematic Review of Generative AI for Agentic Systems}
+    \field{year}{2025}
+  \endentry
+
+  \entry{langgraph}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=L}{%
+         family={{LangChain Inc.}},
+         familyi={L\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{L1}
+    \strng{fullhash}{L1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{https://langchain-ai.github.io/langgraph/}}
+    \field{title}{{LangGraph} : a low-level orchestration framework for
+  stateful agents}
+    \field{year}{2024}
+  \endentry
+
+  \entry{langchain}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=L}{%
+         family={{LangChain Inc.}},
+         familyi={L\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{L1}
+    \strng{fullhash}{L1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{https://python.langchain.com/}}
+    \field{title}{{LangChain} Documentation}
+    \field{year}{2024}
+  \endentry
+
+  \entry{autogen}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=M}{%
+         family={{Microsoft Research}},
+         familyi={M\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{M1}
+    \strng{fullhash}{M1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{https://microsoft.github.io/autogen/}}
+    \field{title}{{AutoGen} : Multi-Agent Conversation Framework}
+    \field{year}{2024}
+  \endentry
+
+  \entry{crewai}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=C}{%
+         family={{CrewAI}},
+         familyi={C\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{C3}
+    \strng{fullhash}{C3}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{https://www.crewai.com/}}
+    \field{title}{{CrewAI} : Framework for orchestrating role-playing
+  autonomous AI agents}
+    \field{year}{2024}
+  \endentry
+
+  \entry{llamaindex}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=L}{%
+         family={{LlamaIndex}},
+         familyi={L\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{L2}
+    \strng{fullhash}{L2}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{https://www.llamaindex.ai/}}
+    \field{title}{{LlamaIndex} : Data framework for LLM applications}
+    \field{year}{2024}
+  \endentry
+
+  \entry{ollama}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=O}{%
+         family={{Ollama}},
+         familyi={O\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{O1}
+    \strng{fullhash}{O1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{https://ollama.com/}}
+    \field{title}{Ollama : run large language models locally}
+    \field{year}{2024}
+  \endentry
+
+  \entry{sbert}{misc}{}
+    \name{author}{2}{}{%
+      {{hash=RN}{%
+         family={Reimers},
+         familyi={R\bibinitperiod},
+         given={Nils},
+         giveni={N\bibinitperiod},
+      }}%
+      {{hash=GI}{%
+         family={Gurevych},
+         familyi={G\bibinitperiod},
+         given={Iryna},
+         giveni={I\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{RNGI1}
+    \strng{fullhash}{RNGI1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{https://www.sbert.net/}}
+    \field{title}{{Sentence-BERT} : Sentence Embeddings using Siamese
+  BERT-Networks}
+    \field{year}{2019}
+  \endentry
+
+  \entry{chromadb}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=C}{%
+         family={{Chroma}},
+         familyi={C\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{C1}
+    \strng{fullhash}{C1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{https://www.trychroma.com/}}
+    \field{title}{{ChromaDB} : the AI-native open-source embedding database}
+    \field{year}{2024}
+  \endentry
+
+  \entry{fastapi}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=RS}{%
+         family={Ramírez},
+         familyi={R\bibinitperiod},
+         given={Sebastián},
+         giveni={S\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{RS1}
+    \strng{fullhash}{RS1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{https://fastapi.tiangolo.com/}}
+    \field{title}{{FastAPI} : Modern, fast web framework for building APIs with
+  Python}
+    \field{year}{2024}
+  \endentry
+
+  \entry{sse_w3c}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=W}{%
+         family={{W3C}},
+         familyi={W\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{W1}
+    \strng{fullhash}{W1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{https://www.w3.org/TR/eventsource/}}
+    \field{title}{Server-Sent Events Specification}
+    \field{year}{2015}
+  \endentry
+
+  \entry{nicegui}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=Z}{%
+         family={{Zauberzeug}},
+         familyi={Z\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{Z1}
+    \strng{fullhash}{Z1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{howpublished}{\url{https://nicegui.io/}}
+    \field{title}{{NiceGUI} : a Python web UI framework based on Quasar}
+    \field{year}{2024}
+  \endentry
+\enddatalist
+\endinput

@@ -1,0 +1,63 @@
+% Figure : pipeline global des 8 agents A1-A8
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=6mm and 9mm, font=\small]
+  \node[agent] (a1)   {A1 -- Orchestrateur};
+  \node[agent, below=of a1]   (a2)   {A2 -- Analyste};
+  \node[smallagent, below=of a2] (a3a) {A3a -- Stratège};
+  \node[smallagent, below=of a3a] (a3b) {A3b -- Collecteur};
+  \node[smallagent, below=of a3b] (a3c) {A3c -- Filtre};
+  \node[agent, below=of a3c]  (a6)   {A6 -- Déduplicateur};
+
+  % fan-out A4
+  \node[smallagent, below left=8mm and 6mm of a6] (a41) {A4$_1$};
+  \node[smallagent, below=of a6]                  (a42) {A4$_2$};
+  \node[smallagent, below right=8mm and 6mm of a6] (a4n) {A4$_N$};
+  \node[font=\footnotesize, below right=4mm and 16mm of a6] (dots) {$\cdots$};
+
+  \node[agent, below=14mm of a42] (red) {Reducer\\\footnotesize\textit{(operator.add)}};
+  \node[agent, below=of red] (a5) {A5 -- Vérificateur};
+
+  \node[decision, below=of a5] (route) {score \(\geq\) seuil ?};
+
+  \node[human, below right=10mm and 8mm of route] (hitl) {HITL\\\footnotesize\textit{interrupt\_before}};
+  \node[agent, below=of hitl] (a7) {A7 -- Recruteur};
+
+  \node[agent, below left=10mm and 8mm of route] (rapport) {Rapport};
+  \node[storage, below=of rapport] (a8) {A8 -- RAG};
+
+  % fleches
+  \draw[flow] (a1) -- (a2);
+  \draw[flow] (a2) -- (a3a);
+  \draw[flow] (a3a) -- (a3b);
+  \draw[flow] (a3b) -- (a3c);
+  \draw[flow] (a3c) -- (a6);
+
+  \draw[flow] (a6) -- (a41);
+  \draw[flow] (a6) -- (a42);
+  \draw[flow] (a6) -- (a4n);
+
+  \draw[flow] (a41) -- (red);
+  \draw[flow] (a42) -- (red);
+  \draw[flow] (a4n) -- (red);
+
+  \draw[flow] (red) -- (a5);
+  \draw[flow] (a5)  -- (route);
+
+  \draw[flow] (route) -- node[font=\footnotesize, above, sloped]{oui} (hitl);
+  \draw[flow] (route) -- node[font=\footnotesize, above, sloped]{non} (rapport);
+  \draw[flow] (hitl)  -- (a7);
+  \draw[flow] (a7)    |- (rapport);
+  \draw[flow] (rapport) -- (a8);
+
+  % accolade fan-out / fan-in
+  \draw[decorate, decoration={brace, amplitude=4pt}, gray!70]
+       ($(a41.west)+(-3mm,3mm)$) -- ($(a4n.east)+(3mm,3mm)$)
+       node[midway, above=2mm, font=\footnotesize\itshape, gray]{Send / fan-out};
+  \draw[decorate, decoration={brace, mirror, amplitude=4pt}, gray!70]
+       ($(a41.west)+(-3mm,-3mm)$) -- ($(a4n.east)+(3mm,-3mm)$)
+       node[midway, below=2mm, font=\footnotesize\itshape, gray]{fan-in};
+\end{tikzpicture}
+\caption[Pipeline global des huit agents]{Pipeline global du système. A1--A2 puis A3a/b/c constituent la phase de cadrage et de \emph{sourcing}. A6 déduplique. A4 est instancié $N$ fois en parallèle (\emph{Send}), un \emph{reducer} agrège les scores, A5 valide. Le routage par seuil dirige le flux vers A7 (sous interruption HITL) ou directement vers le rapport. A8 persiste fiche et candidats validés en RAG.}
+\label{fig:pipeline_global}
+\end{figure}

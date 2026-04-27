@@ -1,14 +1,76 @@
 \chapter{Conclusion et perspectives}
 \label{chap:conclusion}
 
-% Sections cibles :
-% - Bilan du travail réalisé
-% - Apports croisés SMA / Agentic AI mis en oeuvre
-% - Limites identifiées
-% - Perspectives techniques (vérification formelle, MARL, MCP)
-% - Considérations RGPD et éthiques
-
 \section{Bilan}
+
+Ce TER avait pour ambition d'articuler deux paradigmes de l'intelligence artificielle distribuée — les Systèmes Multi-Agents classiques et l'Agentic AI — dans un cas d'étude concret. Trois objectifs avaient été énoncés au chapitre~\ref{chap:presentation} : un objectif théorique (état de l'art et analyse comparative), un objectif méthodologique (sélection argumentée d'un \emph{framework}) et un objectif applicatif (conception, implémentation, évaluation d'un SMA de recrutement).
+
+Les trois objectifs ont été tenus.
+
+\paragraph{Sur le plan théorique.}
+Le chapitre~\ref{chap:etat_art} a synthétisé dix-huit études du dossier \texttt{Etudes/}, dégagé les invariants des SMA (autonomie, propriétés des agents, architectures, coordination formelle, MARL, émergence) et de l'Agentic AI (clarification conceptuelle en trois niveaux, double paradigme symbolique/neuronal, architecture modulaire), puis articulé une analyse comparative en trois temps : éléments communs, différences structurelles, apports croisés. Cette analyse a fourni un cadre interprétatif pour l'ensemble des choix techniques ultérieurs.
+
+\paragraph{Sur le plan méthodologique.}
+Le chapitre~\ref{chap:choix_framework} a formalisé neuf critères d'évaluation, comparé neuf \emph{frameworks} candidats, et conduit à la sélection argumentée de LangGraph. La décision n'a pas été présentée comme une évidence mais comme la conjonction explicite de cinq éléments (adéquation structurelle, convergence avec l'argumentation théorique, indépendance, maturité, expressivité argumentative).
+
+\paragraph{Sur le plan applicatif.}
+Le système comporte huit agents spécialisés (A1 à A8, dont A3 décomposé en trois sous-agents), une mémoire vectorielle calibrée par fiche (deux collections ChromaDB reliées par \texttt{fiche\_id}), une API Gateway FastAPI avec streaming SSE et endpoints HITL, une interface graphique NiceGUI à six pages, une suite d'environ quatre-vingts tests automatisés, un déploiement Docker en trois services. Le code est livré avec un journal de décisions de conception (\texttt{rapportPlan.md}) qui documente \emph{ex ante} les principaux choix.
+
+\paragraph{Contrainte transversale tenue.}
+La contrainte « chaque choix doit être justifié » a été respectée dans l'ensemble du rapport : besoin, alternatives considérées, décision, compromis assumés sont explicités pour chaque décision technique majeure (cf. chapitre~\ref{chap:analyse_systeme}, sections \emph{Justification des choix}).
+
 \section{Limites identifiées}
+
+Plusieurs limites sont assumées et explicitement reconnues.
+
+\paragraph{Qualité du LLM local.}
+Le modèle Ollama choisi pour la confidentialité offre une qualité de raisonnement inférieure à celle des modèles de classe Claude Opus ou GPT-4. L'écart est atténué par un \emph{prompt engineering} contraint, une température basse pour les tâches d'évaluation, une structuration JSON stricte des sorties, et un agent de contrôle indépendant (A5). Il n'est cependant pas annulé : un cas réel exigeant pourrait justifier un basculement ponctuel vers une API externe pour la phase d'évaluation, à condition d'anonymiser au préalable les données candidats.
+
+\paragraph{Couverture du \emph{sourcing}.}
+Le périmètre des sources gratuites (DuckDuckGo, GitHub, Stack Exchange) couvre largement les profils techniques publics, mais sous-représente les métiers non techniques et les profils peu actifs en ligne. L'extension à d'autres sources (Mastodon, GitLab, Hacker News) est triviale via le patron A3a/b/c. L'absence volontaire de LinkedIn et de Malt est une décision argumentée (RGPD, conditions d'utilisation, risque juridique) et non un oubli.
+
+\paragraph{Mémoire RAG limitée aux runs précédents.}
+La calibration par fiche n'apporte une plus-value qu'à partir du second \emph{run} sur une fiche similaire. Au premier \emph{run}, le RAG est silencieux. C'est une propriété recherchée (ne pas injecter de signal là où il n'y en a pas) mais cela limite la calibration pour des cas isolés. Une amélioration possible serait l'injection d'un référentiel initial de candidats étiquetés (\emph{seed}) pour amorcer la mémoire.
+
+\paragraph{Absence d'apprentissage en ligne.}
+Le système n'apprend pas des décisions humaines HITL. Si un recruteur invalide systématiquement les candidats que A5 marque \emph{douteux}, cette information n'est pas exploitée pour ajuster A4 ou A5. Une intégration MARL ou un mécanisme de \emph{feedback} explicite est laissé aux perspectives.
+
+\paragraph{Multi-tenant non traité.}
+Les données sont mutualisées dans une seule instance ChromaDB. Un déploiement servant plusieurs recruteurs avec des données strictement isolées exigerait une refonte de la couche persistance.
+
 \section{Perspectives}
+
+\paragraph{Vérification formelle des invariants.}
+Plusieurs invariants du graphe (par exemple : aucun candidat ne peut être validé sans avoir été évalué) pourraient être vérifiés statiquement par des assertions sur \texttt{GraphState} ou un système de types plus riche. Cette piste rejoindrait l'apport SMA $\rightarrow$ Agentic AI identifié au chapitre~\ref{chap:etat_art} (gouvernance et vérification formelle).
+
+\paragraph{Apprentissage par renforcement multi-agents.}
+Une trajectoire naturelle pour étendre le système consisterait à observer les décisions HITL et les ajustements de A5, et à fine-tuner les seuils \texttt{SCORE\_SEUIL\_CONTACT} et \texttt{SCORE\_SEUIL\_VIABLE}, voire les \emph{prompts} de A4 et A5, par un mécanisme MARL. La littérature SMA dispose d'un cadre formel pour cela \cite{sma_cmu_marl}.
+
+\paragraph{Adoption du Model Context Protocol (MCP).}
+L'écosystème agentique s'oriente vers une standardisation de la communication entre agents et outils via le MCP. Une refonte du \emph{tool calling} de A3 et A4 pour exposer les outils comme des serveurs MCP rendrait le système interopérable avec d'autres orchestrateurs.
+
+\paragraph{Communautés agentiques humain-IA.}
+Conformément à la trajectoire évolutive identifiée par \citeauthor{milosevic_rabhi}~\cite{milosevic_rabhi}, le système pourrait évoluer vers un écosystème où plusieurs recruteurs humains collaborent avec des agents IA partagés, dans un cadre de gouvernance explicite. Cela suppose une couche d'authentification, des rôles formels et une journalisation inter-utilisateurs.
+
+\paragraph{Évaluation utilisateur.}
+Au-delà des tests unitaires, une évaluation par des recruteurs réels sur des fiches de poste réelles permettrait de mesurer empiriquement la qualité du \emph{sourcing}, la pertinence des scores et l'utilité du HITL. Une telle évaluation a été écartée du périmètre TER pour des raisons de calendrier et de protection des données, mais constitue une suite naturelle du travail.
+
 \section{Considérations éthiques et RGPD}
+
+Le recrutement automatisé manipule des données à caractère personnel sensibles (identité, parcours, compétences supposées). Plusieurs principes ont guidé la conception :
+
+\begin{itemize}[leftmargin=1cm]
+\item \textbf{Minimisation} : seules les données nécessaires à l'évaluation sont collectées et stockées. Les profils invalides ne sont pas persistés en RAG.
+\item \textbf{Localité} : le LLM s'exécute sur la machine du déploiement (Ollama) ; aucune donnée candidat n'est envoyée à un fournisseur tiers. Les sources de \emph{sourcing} sont publiques.
+\item \textbf{Souveraineté décisionnelle} : aucune action irréversible (envoi de message) n'est effectuée sans validation humaine explicite. Le système assiste le recruteur, ne le remplace pas.
+\item \textbf{Transparence du scoring} : chaque score est accompagné d'explications structurées par axes ; A5 peut invalider ou ajuster ; le recruteur peut éditer la liste finale.
+\item \textbf{Auditabilité} : chaque exécution est \emph{checkpointée}, journalisée, exportable en JSON. Une demande de droit d'accès ou de droit à l'oubli peut être satisfaite.
+\item \textbf{Hors-scope LinkedIn et Malt} : le scraping de plateformes interdisant explicitement la collecte automatisée a été écarté pour des raisons à la fois juridiques et éthiques.
+\end{itemize}
+
+\medskip
+
+Un usage en production exigerait néanmoins une analyse d'impact relative à la protection des données (AIPD) formelle, une politique de durée de conservation explicite, et l'information préalable des candidats sourcés. Ces éléments dépassent le périmètre d'un TER mais constituent un prérequis indispensable à toute industrialisation.
+
+\medskip
+\textit{Le code source, les tests, les exports d'observabilité et le journal de décisions de conception (\texttt{rapportPlan.md}) accompagnent ce rapport et peuvent être consultés pour reproduire l'analyse.}

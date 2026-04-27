@@ -1,0 +1,27 @@
+% Figure : pipeline A3 sourcing en trois etapes
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=8mm and 12mm, font=\small]
+  \node[data, text width=3.2cm] (profil) {profil de compétences (A2)};
+  \node[bigagent, below=of profil] (a3a) {A3a -- Stratège\\\footnotesize\itshape génère le plan de requêtes};
+  \node[bigagent, below=of a3a]   (a3b) {A3b -- Collecteur\\\footnotesize\itshape exécute les recherches};
+  \node[bigagent, below=of a3b]   (a3c) {A3c -- Filtre\\\footnotesize\itshape règles algorithmiques};
+  \node[data, below=of a3c, text width=3.2cm] (out) {profils bruts};
+
+  \draw[flow] (profil) -- (a3a);
+  \draw[flow] (a3a) -- node[right, font=\footnotesize]{\texttt{requetes\_recherche}} (a3b);
+  \draw[flow] (a3b) -- node[right, font=\footnotesize]{hits agrégés} (a3c);
+  \draw[flow] (a3c) -- (out);
+
+  % details a droite de chaque etape
+  \node[noteblock, right=of a3a, text width=6cm]
+       {\textbf{LLM seul.} Aucun appel réseau. Sortie JSON :
+        requêtes web, LinkedIn, GitHub, Stack Overflow, sites CV.};
+  \node[noteblock, right=of a3b, text width=6cm]
+       {\textbf{Sources gratuites.} DuckDuckGo, GitHub Search Users API, Stack Exchange API. Déduplication par URL.};
+  \node[noteblock, right=of a3c, text width=6cm]
+       {\textbf{Sans LLM.} Domaines bloqués (\(\sim\)28), mots-clés (\(\sim\)47), filtre URL, scraping puis post-filtre.};
+\end{tikzpicture}
+\caption[Pipeline de sourcing A3]{Pipeline de \emph{sourcing} A3 en trois étapes spécialisées. Le stratège est cognitif (LLM), le collecteur est purement logistique, le filtre est strictement algorithmique.}
+\label{fig:pipeline_a3}
+\end{figure}

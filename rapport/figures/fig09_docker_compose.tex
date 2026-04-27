@@ -1,0 +1,29 @@
+% Figure : architecture Docker Compose 3 services
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=10mm and 14mm, font=\small]
+  \node[bigagent, fill=cStoreBg, draw=cStore, text width=3.4cm] (ollama)
+       {ollama\\\footnotesize\itshape :11434};
+  \node[bigagent, right=of ollama, text width=3.4cm] (api)
+       {sma-api\\\footnotesize\itshape FastAPI :8000};
+  \node[bigagent, right=of api, fill=cHumanBg, draw=cHuman, text width=3.4cm] (ui)
+       {sma-ui\\\footnotesize\itshape NiceGUI :8080};
+
+  \draw[flowboth] (ollama) -- node[above, font=\footnotesize]{LLM} (api);
+  \draw[flowboth] (api)    -- node[above, font=\footnotesize]{HTTP + SSE} (ui);
+
+  % Volumes
+  \node[storage, below=14mm of api, minimum width=2.6cm] (logs) {\texttt{./logs}};
+  \node[storage, right=of logs, minimum width=2.6cm] (data) {\texttt{./data}};
+
+  \draw[faint] (api) -- (logs);
+  \draw[faint] (api) -- (data);
+
+  \begin{scope}[on background layer]
+    \node[group, fit=(ollama)(ui)(logs)(data),
+          label={[font=\small\itshape, anchor=south]north:Docker Compose}] {};
+  \end{scope}
+\end{tikzpicture}
+\caption[Déploiement Docker Compose à trois services]{Déploiement Docker Compose à trois services. Le LLM Ollama, l'API et l'UI tournent dans des conteneurs isolés. Deux volumes persistent les journaux d'observabilité (\texttt{./logs}) et la base ChromaDB (\texttt{./data}).}
+\label{fig:docker_compose}
+\end{figure}

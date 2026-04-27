@@ -1,0 +1,36 @@
+% Figure : pattern Send / Reduce
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=8mm and 8mm, font=\small]
+  \node[agent] (a6) {A6 Déduplicateur\\\footnotesize\texttt{profils\_dedupliques}};
+
+  \node[smallagent, below=14mm of a6, xshift=-32mm] (a41) {A4$_1$\\\footnotesize candidat 1};
+  \node[smallagent, below=14mm of a6, xshift=-10mm] (a42) {A4$_2$\\\footnotesize candidat 2};
+  \node[smallagent, below=14mm of a6, xshift=12mm]  (a43) {A4$_3$\\\footnotesize candidat 3};
+  \node[font=\footnotesize, below=14mm of a6, xshift=28mm] (dots) {$\cdots$};
+  \node[smallagent, below=14mm of a6, xshift=42mm]  (a4n) {A4$_N$\\\footnotesize candidat $N$};
+
+  \node[agent, below=22mm of a42, text width=4.4cm] (red)
+       {Reducer \texttt{operator.add}\\\footnotesize fusion des listes \texttt{candidats\_scores}};
+
+  \node[agent, below=of red] (a5) {A5 Vérificateur};
+
+  \draw[flow] (a6.south) -- node[midway, right=10mm, font=\footnotesize\itshape]{\texttt{Send()} \(\times N\)} (a42.north);
+  \draw[flow] (a6.south) -- (a41.north);
+  \draw[flow] (a6.south) -- (a43.north);
+  \draw[flow] (a6.south) -- (a4n.north);
+
+  \draw[flow] (a41.south) -- (red.north);
+  \draw[flow] (a42.south) -- (red.north);
+  \draw[flow] (a43.south) -- (red.north);
+  \draw[flow] (a4n.south) -- (red.north);
+
+  \draw[flow] (red) -- (a5);
+
+  \node[noteblock, right=18mm of a42, text width=4.6cm] (note)
+       {\textbf{Borne :} \texttt{MAX\_PROFILS\_PARALLELES}\\
+        Évaluations indépendantes, sans état partagé, fusionnées par le \emph{reducer}.};
+\end{tikzpicture}
+\caption[Pattern Send / Reduce]{Pattern \emph{Send / Reduce} de LangGraph appliqué à l'évaluation parallèle. Chaque instance d'A4 traite un candidat distinct ; le \emph{reducer} fusionne les listes \texttt{candidats\_scores} sans collision.}
+\label{fig:send_reduce}
+\end{figure}

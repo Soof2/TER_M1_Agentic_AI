@@ -1,0 +1,22 @@
+% Figure : architecture modulaire d'un systeme agentique
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=10mm and 14mm]
+  \node[bigagent] (llm) {Moteur de raisonnement\\\footnotesize(LLM)};
+  \node[bigagent, above left=of llm] (mem) {Mémoire persistante\\\footnotesize(court / long terme, RAG)};
+  \node[bigagent, above right=of llm] (plan) {Planification\\\footnotesize(multi-étapes)};
+  \node[bigagent, below left=of llm] (tools) {Sélection d'outils\\\footnotesize(tool calling)};
+  \node[bigagent, below right=of llm] (eval) {Évaluation\\\footnotesize(retour de boucle)};
+
+  \draw[flowboth] (llm) -- (mem);
+  \draw[flowboth] (llm) -- (plan);
+  \draw[flowboth] (llm) -- (tools);
+  \draw[flowboth] (llm) -- (eval);
+
+  \begin{scope}[on background layer]
+    \node[group, fit=(mem)(plan)(tools)(eval)(llm), label={[font=\small\itshape, anchor=south]north:Système agentique}] {};
+  \end{scope}
+\end{tikzpicture}
+\caption[Architecture modulaire d'un système agentique]{Architecture modulaire récurrente d'un système agentique : un LLM cognitif au centre, entouré d'une mémoire persistante, d'un planificateur, d'un sélecteur d'outils et d'un module d'évaluation refermant la boucle \cite{agentic_wavestone_playbook,alva_pandey,vaidhyanathan_taibi}.}
+\label{fig:archi_agentique}
+\end{figure}

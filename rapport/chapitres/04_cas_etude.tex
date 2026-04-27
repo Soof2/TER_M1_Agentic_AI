@@ -1,14 +1,157 @@
 \chapter{Cas d'étude : SMA de recrutement}
 \label{chap:cas_etude}
 
-% Sections cibles :
-% - Cahier des charges fonctionnel
-% - Use cases utilisateur
-% - Vue d'ensemble de l'architecture (graphe des 8 agents A1-A8)
-% - Données manipulées (fiche de poste, profils, candidats évalués)
-% - Périmètre fonctionnel et non-fonctionnel
+Ce chapitre spécifie le cas d'étude implémenté et donne une vue d'ensemble du système avant l'analyse détaillée du chapitre~\ref{chap:analyse_systeme}. La section~\ref{sec:cdc} fixe le cahier des charges, la section~\ref{sec:cas_usage} décrit les cas d'usage, la section~\ref{sec:archi_overview} présente l'architecture des huit agents, et la section~\ref{sec:perimetre} précise le périmètre fonctionnel et non-fonctionnel.
 
 \section{Cahier des charges}
+\label{sec:cdc}
+
+\subsection{Entrée}
+
+L'utilisateur (un recruteur) fournit en entrée une \emph{fiche de poste} sous forme de texte libre : intitulé, missions, compétences attendues, niveau de séniorité, contexte (lieu, type de contrat, télétravail). Aucun format imposé : le texte peut être copié-collé d'une annonce ou rédigé pour la circonstance.
+
+\subsection{Sorties}
+
+Trois artefacts sont produits :
+
+\begin{enumerate}
+\item Une \textbf{liste de candidats classés} : chaque candidat est identifié par un nom, une ou plusieurs sources (URL d'origine), un score numérique entre 0 et 100, des explications structurées par axes (compétences, séniorité, contexte) et un statut de validation (\emph{validé}, \emph{douteux}, \emph{invalide}).
+\item Un \textbf{rapport synthétique} en Markdown : récapitule la fiche, les candidats retenus, les raisons du retenu/rejet, les statistiques d'exécution.
+\item Le cas échéant, un ensemble de \textbf{messages de contact} pré-rédigés (un par candidat retenu), conditionnés à une validation humaine explicite.
+\end{enumerate}
+
+\subsection{Exigences fonctionnelles}
+
+\begin{description}[leftmargin=1.4cm,style=nextline]
+\item[EF-1] Sourcer des profils sur des sources publiques sans clé API payante.
+\item[EF-2] Filtrer le bruit (offres d'emploi, profils non pertinents) sans perdre de profils valides.
+\item[EF-3] Évaluer chaque profil par rapport à la fiche, avec score et explications.
+\item[EF-4] Effectuer un contrôle pair-à-pair : un agent vérificateur peut invalider ou ajuster un score.
+\item[EF-5] Bloquer toute action irréversible (envoi de message) sans validation humaine explicite.
+\item[EF-6] Mémoriser les évaluations passées pour calibrer les évaluations futures, sans introduire de biais inter-fiches.
+\item[EF-7] Permettre un suivi en temps réel : avancement du pipeline, événements, métriques.
+\end{description}
+
+\subsection{Exigences non-fonctionnelles}
+
+\begin{description}[leftmargin=1.4cm,style=nextline]
+\item[ENF-1] Confidentialité : les données candidats ne sortent pas du serveur ; le LLM est exécuté localement.
+\item[ENF-2] Auditabilité : chaque agent journalise ses entrées, ses sorties et ses métriques ; les exécutions sont \emph{checkpointées}.
+\item[ENF-3] Reproductibilité : le système est livré avec un \texttt{docker-compose.yml} permettant un déploiement complet en une commande.
+\item[ENF-4] Robustesse : la suite de tests automatisés couvre les composants critiques (graphe, RAG, API, filtre, déduplicateur).
+\item[ENF-5] Démonstrabilité : le système doit pouvoir être démontré hors ligne devant un jury.
+\end{description}
+
 \section{Cas d'usage}
+\label{sec:cas_usage}
+
+Trois cas d'usage principaux structurent l'interaction.
+
+\paragraph{UC-1 — Lancer un sourcing.} Le recruteur saisit une fiche de poste dans la page d'accueil de l'interface graphique, choisit s'il souhaite activer la validation humaine intermédiaire (HITL), puis lance le pipeline. Il est redirigé vers une page de suivi temps réel.
+
+\paragraph{UC-2 — Suivre, valider et reprendre.} Sur la page de suivi, le recruteur observe le diagramme du pipeline qui s'illumine au fur et à mesure de l'avancement. Lorsque le pipeline atteint le point d'arrêt HITL, l'interface affiche les candidats présélectionnés et propose trois actions : approuver la liste telle quelle, tout rejeter, ou éditer la liste (JSON éditable). L'action choisie reprend le pipeline exactement là où il s'était arrêté.
+
+\paragraph{UC-3 — Consulter le rapport et la mémoire.} Une fois le pipeline terminé, le recruteur peut consulter le rapport final, l'historique des \emph{runs} précédents, et explorer la mémoire vectorielle (recherche de profils similaires, statistiques par fiche).
+
 \section{Vue d'ensemble de l'architecture}
+\label{sec:archi_overview}
+
+\subsection{Topologie en huit agents}
+
+Le pipeline se compose de huit agents principaux organisés en pipeline avec branchements dynamiques :
+
+\begin{description}[leftmargin=1.4cm,style=nextline]
+\item[A1 — Orchestrateur] supervise l'exécution, initialise l'état, produit le rapport final.
+\item[A2 — Analyste] extrait de la fiche libre un profil de compétences structuré (\emph{hard skills}, \emph{soft skills}, séniorité, contexte).
+\item[A3a — Stratège] (sous-agent de recherche) génère un plan de requêtes adaptées par source.
+\item[A3b — Collecteur] exécute les requêtes sur les sources gratuites (DuckDuckGo, GitHub, Stack Exchange).
+\item[A3c — Filtre anti-bruit] applique un filtrage algorithmique des hits (domaines bloqués, mots-clés, URL).
+\item[A6 — Déduplicateur] fusionne les profils redondants par similarité de noms et d'URL.
+\item[A4 — Évaluateur] (instances parallèles) note chaque candidat sur la base de la fiche.
+\item[A5 — Vérificateur] croise les scores et les profils bruts pour invalider ou ajuster.
+\item[A7 — Recruteur] rédige les messages de contact, après validation humaine.
+\item[A8 — Persistance RAG] stocke fiche et candidats validés en mémoire vectorielle.
+\end{description}
+
+La numérotation A1 à A8 correspond à la séquence logique vue par le recruteur, sans correspondre strictement à l'ordre d'exécution ; A3a/b/c sont trois sous-agents d'A3, et A4 est instancié $N$ fois en parallèle (un par candidat).
+
+\subsection{Flux du pipeline}
+
+La figure~\ref{fig:pipeline_global} donne une vue complète du flux. Le pipeline progresse séquentiellement de A1 jusqu'à A6, puis s'éclate en $N$ instances d'A4 (un par candidat), converge dans un \emph{reducer}, est validé par A5, est routé par seuil de score, passe éventuellement par un point d'arrêt humain (HITL) avant A7, et s'achève par la génération du rapport et la persistance RAG par A8.
+
+\input{figures/fig03_pipeline_global}
+
+Le routage après A5 est conditionnel : si le meilleur candidat dépasse un seuil absolu, ou si le top-N relatif comporte des candidats viables, le flux passe par A7 (Recruteur, sous interruption HITL). Sinon, il passe directement au rapport. Dans tous les cas, A8 (persistance RAG) clôt l'exécution.
+
+\subsection{État partagé}
+
+Tous les agents communiquent via un état partagé typé \texttt{GraphState} (\texttt{TypedDict} dans \texttt{src/state.py}). Les principaux champs sont :
+
+\begin{itemize}[leftmargin=1cm]
+\item \texttt{fiche\_poste} : texte libre fourni en entrée ;
+\item \texttt{profil\_competences} : structure produite par A2 ;
+\item \texttt{requetes\_recherche} : plan de requêtes produit par A3a ;
+\item \texttt{profils\_bruts} : hits collectés et filtrés ;
+\item \texttt{profils\_dedupliques} : profils consolidés par A6 ;
+\item \texttt{candidats\_scores} : scores produits par les instances d'A4 ;
+\item \texttt{candidats\_valides} : sortie de A5 (avec statuts \emph{validé}, \emph{douteux}, \emph{invalide}) ;
+\item \texttt{messages\_envoyes} : messages rédigés par A7 ;
+\item \texttt{rapport} : rapport final produit par A1 ;
+\item \texttt{metriques} : journal d'observabilité.
+\end{itemize}
+
+Les champs lus/écrits par plusieurs agents en parallèle sont annotés \texttt{Annotated[list, operator.add]} pour garantir la cohérence des écritures concurrentes.
+
+\subsection{Stack technique}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Couche} & \textbf{Technologie retenue} \\
+\midrule
+Orchestration multi-agents & LangGraph \cite{langgraph} \\
+Modèle de langage          & Ollama (\emph{kimi-k2.5:cloud} par défaut) \cite{ollama} \\
+\emph{Embeddings}          & SentenceTransformers \texttt{all-MiniLM-L6-v2} \cite{sbert} \\
+Mémoire vectorielle        & ChromaDB \cite{chromadb} \\
+Recherche web              & DuckDuckGo (\texttt{duckduckgo-search}) \\
+Recherche profils          & GitHub Search Users API, Stack Exchange API \\
+\emph{Scraping}            & \texttt{requests} + BeautifulSoup~4 \\
+API Gateway                & FastAPI + Uvicorn \cite{fastapi} \\
+Streaming temps réel       & Server-Sent Events \cite{sse_w3c} \\
+Interface graphique        & NiceGUI \cite{nicegui} \\
+Conteneurisation           & Docker \& Docker Compose \\
+Tests automatisés          & \texttt{pytest} \\
+\bottomrule
+\end{tabular}
+\caption{Stack technique du système. Chaque choix est justifié au chapitre~\ref{chap:analyse_systeme}.}
+\end{table}
+
 \section{Périmètre du système}
+\label{sec:perimetre}
+
+\subsection{Inclus dans le périmètre}
+
+\begin{itemize}[leftmargin=1cm]
+\item Sourcing automatique sur trois sources gratuites (DDG, GitHub, Stack Exchange).
+\item Évaluation par LLM local avec scoring multi-axes et explications.
+\item Vérification pair-à-pair indépendante (A5).
+\item Validation humaine explicite avant tout contact effectif (HITL).
+\item Mémoire vectorielle calibrée par fiche de poste.
+\item Interface graphique avec suivi temps réel et exploration de la mémoire.
+\item Observabilité : journaux structurés, exports JSON, page \emph{métriques}.
+\item Tests automatisés sur les composants critiques.
+\end{itemize}
+
+\subsection{Hors du périmètre}
+
+\begin{itemize}[leftmargin=1cm]
+\item Sourcing sur LinkedIn, Malt, Indeed (refusé pour des raisons RGPD, ToS et risque juridique). Discuté en section~\ref{sec:tradeoffs}.
+\item Envoi effectif de messages : le système rédige et propose, mais n'envoie pas. Le recruteur valide et exécute manuellement, ce qui préserve la traçabilité humaine.
+\item Apprentissage en ligne : aucun \emph{fine-tuning} du LLM, aucun apprentissage par renforcement entre agents. Le RAG calibré constitue le seul mécanisme de mémoire inter-runs.
+\item Multi-tenant : le système n'est pas conçu pour servir plusieurs recruteurs simultanément avec des données isolées par tenant. Cette extension est laissée aux perspectives.
+\item Intégration ATS (\emph{Applicant Tracking System}) : aucun connecteur vers Workday, SAP SuccessFactors ou équivalents. La sortie reste à la main du recruteur.
+\end{itemize}
+
+L'analyse détaillée de chaque composant et de chaque choix d'implémentation fait l'objet du chapitre suivant.

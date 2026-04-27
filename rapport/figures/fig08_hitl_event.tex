@@ -1,0 +1,40 @@
+% Figure : signalement HITL via threading.Event
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=6mm and 26mm, font=\small]
+
+  % Worker thread (gauche)
+  \node[font=\small\bfseries] (lblw) at (0,0) {Worker thread (LangGraph)};
+  \node[smallagent, below=4mm of lblw] (a5) {A5 Vérificateur};
+  \node[smallagent, below=of a5] (intr) {\texttt{interrupt\_before A7}};
+  \node[smallagent, below=of intr, fill=cDecisionBg, draw=cDecision] (push) {push \texttt{awaiting\_hitl}};
+  \node[smallagent, below=of push, fill=cDecisionBg, draw=cDecision, text width=2.6cm] (wait)
+        {\texttt{event.wait(600s)}\\\footnotesize\itshape bloqué};
+  \node[smallagent, below=14mm of wait] (resume) {\texttt{update\_state(d)}};
+  \node[smallagent, below=of resume] (a7) {A7 Recruteur};
+
+  % HTTP handler thread (droite)
+  \node[font=\small\bfseries, right=of lblw] (lbleh) {HTTP handler};
+  \node[smallagent, below=of lbleh, fill=cHumanBg, draw=cHuman] (req) {\texttt{POST /hitl}};
+  \node[smallagent, below=of req, fill=cHumanBg, draw=cHuman] (store) {decision stockée};
+  \node[smallagent, below=of store, fill=cHumanBg, draw=cHuman] (set)   {\texttt{event.set()}};
+
+  % flux internes
+  \draw[flow] (a5) -- (intr);
+  \draw[flow] (intr) -- (push);
+  \draw[flow] (push) -- (wait);
+  \draw[flow] (wait) -- (resume);
+  \draw[flow] (resume) -- (a7);
+
+  \draw[flow] (req) -- (store);
+  \draw[flow] (store) -- (set);
+
+  % signal entre threads
+  \draw[signal] (set.west) -- node[above, font=\footnotesize\itshape]{signal} (wait.east);
+
+  % SSE
+  \draw[signal, draw=cFlow] (push.east) -- node[above, font=\footnotesize\itshape]{SSE} (req.west);
+\end{tikzpicture}
+\caption[Synchronisation HITL par \texttt{threading.Event}]{Séquence du \emph{human-in-the-loop}. Le \emph{worker} LangGraph pousse un événement SSE puis bloque sur \texttt{Event.wait()} ; le handler HTTP traite la décision puis appelle \texttt{Event.set()}. La sémantique est claire, le \emph{timeout} est intégré, et il n'y a pas de \emph{polling} CPU.}
+\label{fig:hitl_event}
+\end{figure}

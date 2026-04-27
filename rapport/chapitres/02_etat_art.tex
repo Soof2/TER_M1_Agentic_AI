@@ -1,13 +1,218 @@
 \chapter{État de l'art}
 \label{chap:etat_art}
 
-% Sections cibles :
-% - SMA classiques : définition, propriétés, architectures, coordination, MARL
-% - Agentic AI : clarification conceptuelle, double paradigme, architecture
-% - Analyse comparative SMA / Agentic AI : communs, différences, apports croisés
-% Source principale : Etudes/etudes_sma_/, Etudes/etudes_agentic_ai_/, analyse_comparative_SMA_AgenticAI.pdf
+Ce chapitre rend compte du travail bibliographique conduit pendant les premières semaines du TER. Il s'appuie sur dix-huit études rassemblées dans le dossier \texttt{Etudes/} du projet (six études dédiées aux SMA, onze études dédiées à l'Agentic AI, plus une synthèse comparative) et résume les invariants, les divergences et les ponts entre les deux paradigmes. La section~\ref{sec:sma} traite des SMA classiques, la section~\ref{sec:agentic} de l'Agentic AI, la section~\ref{sec:compare} de l'analyse comparative, et la section~\ref{sec:synthese_etat_art} positionne le projet à l'intersection des deux courants.
 
 \section{Systèmes Multi-Agents (SMA) classiques}
+\label{sec:sma}
+
+\subsection{Définition et composants fondamentaux}
+
+Selon \citeauthor{dorri2018mas}~\cite{dorri2018mas}, un \emph{Système Multi-Agents} est un ensemble d'agents autonomes interagissant dans un environnement partagé en vue d'objectifs individuels ou collectifs. \citeauthor{sma_systemes}~\cite{sma_systemes} complètent en identifiant cinq composants structurants :
+
+\begin{itemize}[leftmargin=1cm]
+\item \textbf{Agents} : entités autonomes capables de percevoir et d'agir ;
+\item \textbf{Environnement} : espace partagé dans lequel les agents évoluent ;
+\item \textbf{Interactions} : échanges et communications entre agents ;
+\item \textbf{Organisation} : structure régissant les rôles et les relations ;
+\item \textbf{Objectifs} : buts individuels ou collectifs poursuivis.
+\end{itemize}
+
+\subsection{Propriétés des agents}
+
+Un agent au sein d'un SMA est conventionnellement caractérisé par quatre propriétés \cite{sma_systemes,sma_general_survey} :
+
+\begin{description}[leftmargin=1.4cm,style=nextline]
+\item[Autonomie] décision indépendante sans intervention extérieure ;
+\item[Réactivité] capacité à répondre aux variations de l'environnement ;
+\item[Proactivité] poursuite active d'objectifs définis ;
+\item[Sociabilité] aptitude à communiquer et à coopérer.
+\end{description}
+
+Ces quatre propriétés sont des points d'évaluation directement transposables à l'Agentic AI : un système agentique qui les satisfait simultanément peut prétendre à un statut d'agent au sens classique du terme.
+
+\subsection{Architectures organisationnelles et cognitives}
+
+Les SMA peuvent adopter différentes architectures organisationnelles selon les contraintes du domaine \cite{dorri2018mas} :
+
+\begin{description}[leftmargin=1.4cm,style=nextline]
+\item[Centralisée] un agent maître coordonne les agents subordonnés ;
+\item[Décentralisée] la coordination émerge des interactions locales ;
+\item[Hiérarchique] organisation multi-niveaux combinant coordination locale et supervision globale.
+\end{description}
+
+\citeauthor{sma_systemes}~\cite{sma_systemes} distinguent en parallèle trois types d'architectures cognitives :
+
+\begin{description}[leftmargin=1.4cm,style=nextline]
+\item[Réactifs] agents simples répondant directement aux stimuli ;
+\item[Cognitifs] agents dotés d'une représentation interne et d'une capacité de planification ;
+\item[Hybrides] combinaison des deux approches.
+\end{description}
+
+Le système de recrutement étudié dans ce rapport relève sans ambiguïté de la catégorie des architectures hiérarchiques cognitives : un orchestrateur (A1) supervise des agents spécialisés, chacun doté d'une représentation explicite de l'état partagé (\texttt{GraphState}) et d'une capacité de planification (par \emph{prompt} structuré).
+
+\subsection{Coordination, négociation et protocoles formels}
+
+Les travaux du \emph{General Survey}~\cite{sma_general_survey} formalisent les interactions multi-agents par plusieurs mécanismes éprouvés :
+
+\begin{itemize}[leftmargin=1cm]
+\item \textbf{Contract Net Protocol} : appel d'offres pour l'allocation de tâches ;
+\item \textbf{Théorie des jeux} : modélisation des stratégies et des équilibres ;
+\item \textbf{Mécanismes d'enchères} : allocation optimale de ressources ;
+\item \textbf{Consensus distribué} : convergence vers un accord collectif.
+\end{itemize}
+
+\citeauthor{dorri2018mas}~\cite{dorri2018mas} soulignent par ailleurs le rôle structurant de l'\emph{Agent Communication Language} (ACL) standardisé par la FIPA \cite{fipa_acl} : performatives, ontologie partagée, intentions explicites. Ces protocoles garantissent trois propriétés critiques pour les systèmes distribués : stabilité, optimalité, convergence.
+
+Le présent projet n'implémente pas de protocole FIPA-ACL stricto sensu. Il en hérite cependant l'esprit : la communication entre agents passe par un schéma typé (\texttt{TypedDict}), chaque champ porte une sémantique métier explicite, et les écritures concurrentes sont synchronisées par des \emph{reducers} formellement définis (cf.\ chapitre~\ref{chap:analyse_systeme}).
+
+\subsection{Apprentissage : du SMA au MARL}
+
+Le \emph{CMU Paper}~\cite{sma_cmu_marl} établit un pont entre les SMA classiques et le \emph{Multi-Agent Reinforcement Learning} (MARL). Quatre défis principaux y sont identifiés : non-stationnarité (l'environnement évolue selon les actions de tous les agents), instabilité de convergence (mise à jour conjointe des politiques), équilibre coopération / compétition, et exploration collective sans duplication.
+
+Notre projet n'introduit pas d'apprentissage en ligne entre agents : le LLM est utilisé en mode inférence seule, sans \emph{fine-tuning}. Le RAG calibré par fiche (cf.\ chapitre~\ref{chap:analyse_systeme}) constitue toutefois un mécanisme rudimentaire d'amélioration inter-runs : les évaluations passées, conditionnées au contexte de leur fiche, alimentent un signal de calibration pour les évaluations suivantes.
+
+\subsection{Émergence et intelligence collective}
+
+Le \emph{Visual Survey}~\cite{sma_visual_survey} met en lumière la propriété d'émergence : des comportements globaux complexes naissent d'interactions locales simples (trafic routier, marchés financiers, propagation d'épidémies). L'intelligence collective dépasse alors la somme des capacités individuelles.
+
+Cette propriété est moins directement applicable au cas du recrutement, qui ne mobilise pas un grand nombre d'agents homogènes. On pourrait néanmoins la rapprocher, à un niveau plus modeste, du pattern \emph{Send/Reduce} mis en œuvre dans le système : $N$ instances de l'évaluateur travaillent en parallèle puis convergent par un agrégateur.
+
+\subsection{Applications}
+
+Les SMA trouvent des applications dans des domaines variés \cite{sma_wjarr} : \emph{smart grids}, véhicules autonomes, robotique collective, blockchain, simulation sociale, \emph{smart cities}, Industrie~4.0. Le recrutement automatisé n'apparaît pas dans cette liste canonique : il est plus naturellement classé du côté de l'IA générative et des agents conversationnels. Le présent travail, en mêlant les deux courants, contribue à élargir le spectre applicatif.
+
 \section{Agentic AI : définition et fondements}
+\label{sec:agentic}
+
+\subsection{De l'agent à l'agenticité}
+
+Plusieurs travaux récents convergent vers une clarification conceptuelle : l'Agentic AI n'est ni un simple agent LLM augmenté d'outils, ni une réincarnation des SMA classiques \cite{sapkota2026,schneider2025,milosevic_rabhi}. Trois niveaux émergent :
+
+\begin{description}[leftmargin=1.4cm,style=nextline]
+\item[AI Agents \cite{sapkota2026}] systèmes modulaires activés par des LLM, spécialisés dans l'exécution de tâches définies via intégration d'outils et \emph{prompt engineering} ;
+\item[Agentic AI \cite{schneider2025,pati2025}] paradigme orienté objectifs, caractérisé par la planification autonome, la mémoire persistante et l'adaptation dynamique ;
+\item[Communautés agentiques \cite{milosevic_rabhi}] écosystèmes hybrides où agents IA et humains interagissent via des rôles formels et des mécanismes de gouvernance.
+\end{description}
+
+L'agenticité correspond moins à une technologie spécifique qu'à un changement de philosophie computationnelle : le passage d'une génération réactive à une action intentionnelle structurée.
+
+\subsection{Double paradigme : symbolique et neuronal}
+
+\citeauthor{abouali2026}~\cite{abouali2026} proposent un cadre interprétatif à double paradigme :
+
+\begin{description}[leftmargin=1.4cm,style=nextline]
+\item[Paradigme symbolique] planification déterministe, état persistant, vérification formelle, forte prédictibilité (souvent dominant en santé critique) ;
+\item[Paradigme neuronal] orchestration par LLM, génération probabiliste, adaptabilité élevée (prévalent en finance et environnements dynamiques).
+\end{description}
+
+Les travaux convergent vers une trajectoire neuro-symbolique hybride combinant adaptabilité (LLM), robustesse logique (symbolique) et vérifiabilité (méthodes formelles). Le projet présenté ici relève d'une telle hybridation : la topologie du graphe et les contrats d'état sont symboliques (déterministes, typés, testables), tandis que les nœuds A2, A3a, A4 et A5 reposent sur un LLM probabiliste.
+
+\subsection{Architecture générale d'un système agentique}
+
+Les études techniques \cite{agentic_wavestone_playbook,alva_pandey,vaidhyanathan_taibi} décrivent une architecture modulaire récurrente composée de : un moteur de raisonnement (LLM comme cœur cognitif), une mémoire persistante (court et long terme), une planification multi-étapes, une sélection dynamique d'outils, et une boucle itérative analyse-plan-action-évaluation. La figure~\ref{fig:archi_agentique} en donne une représentation synthétique.
+
+\input{figures/fig02_archi_agentique}
+
+L'industrialisation de tels systèmes requiert des registres de modèles et d'agents (\emph{Agent Factory}), une orchestration \emph{cloud-native}, des microservices distribués, et des mécanismes de \emph{guardrails}. \citeauthor{vaidhyanathan_taibi}~\cite{vaidhyanathan_taibi} relèvent toutefois plusieurs faiblesses persistantes : modèles de mémoire limités, planification rudimentaire, écosystème fragmenté.
+
+\subsection{Du single-agent aux systèmes multi-agents agentiques}
+
+\citeauthor{milosevic_rabhi}~\cite{milosevic_rabhi} et \citeauthor{hughes2025}~\cite{hughes2025} montrent que l'évolution naturelle de l'Agentic AI est la coordination multi-agents, sous trois formes :
+
+\begin{itemize}[leftmargin=1cm]
+\item orchestration hiérarchique (manager $\rightarrow$ experts) ;
+\item collaboration horizontale ;
+\item intégration humain-dans-la-boucle.
+\end{itemize}
+
+Contrairement aux SMA classiques, ces systèmes utilisent des LLM comme couche cognitive, intègrent une décomposition dynamique des tâches et introduisent une autonomie adaptative plutôt qu'un échange protocolaire. Le système de recrutement implémenté combine ces trois formes : orchestration hiérarchique (A1 supervise), collaboration horizontale (A4 et A5 coopèrent en validation pair-à-pair), et HITL natif via \texttt{interrupt\_before}.
+
+\subsection{Applications structurantes}
+
+Les domaines récurrents identifiés sont : santé (aide au diagnostic, déterminisme requis), finance (traitement dynamique de flux massifs), robotique (perception-planification hybride), génie logiciel (agents de codage \cite{tosem2025}), automatisation d'entreprise (orchestration décisionnelle).
+
+\subsection{Enjeux transversaux}
+
+Plusieurs défis structurants émergent de manière convergente \cite{patel2025,pati2025,vaidhyanathan_taibi} :
+
+\begin{itemize}[leftmargin=1cm]
+\item hallucination et fragilité des LLM ;
+\item sécurité (\emph{prompt injection}, fuite de données) ;
+\item responsabilité et attribution des décisions ;
+\item consommation énergétique ;
+\item alignement éthique et gouvernance réglementaire.
+\end{itemize}
+
+La montée en autonomie accroît mécaniquement la nécessité de vérification formelle, de supervision humaine et de cadres organisationnels robustes.
+
+\subsection{Trajectoire évolutive}
+
+La convergence des articles suggère une trajectoire claire \cite{schneider2025,milosevic_rabhi}, illustrée figure~\ref{fig:trajectoire} :
+
+\input{figures/fig01_trajectoire_agentic}
+
+L'Agentic AI n'est pas une simple extension des LLM : c'est une transformation systémique de l'architecture décisionnelle, marquant le passage d'une intelligence générative à une intelligence organisationnelle distribuée.
+
 \section{Analyse comparative SMA / Agentic AI}
-\section{Synthèse de l'état de l'art}
+\label{sec:compare}
+
+L'analyse comparative repose sur le document \texttt{analyse\_comparative\_SMA\_AgenticAI.pdf} produit dans le dossier \texttt{Etudes/}. Trois sections la structurent : éléments communs, différences structurelles, apports croisés.
+
+\subsection{Éléments communs}
+
+Cinq invariants relient les deux paradigmes :
+
+\begin{enumerate}
+\item \textbf{Autonomie des agents} : décisions sans intervention extérieure \cite{dorri2018mas,sapkota2026}.
+\item \textbf{Poursuite active d'objectifs} : action proactive et non simplement réactive \cite{sma_systemes,pati2025}.
+\item \textbf{Collaboration multi-agents} : résolution de problèmes complexes par coordination \cite{sma_systemes,milosevic_rabhi}.
+\item \textbf{Mémoire et persistance du contexte} : cohérence des décisions dans le temps \cite{sma_general_survey,alva_pandey}.
+\item \textbf{Domaines d'application communs} : santé, robotique, véhicules autonomes, automatisation d'entreprise \cite{sma_wjarr,hughes2025,abouali2026}.
+\end{enumerate}
+
+\subsection{Différences structurelles}
+
+Cinq différences les opposent :
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\textwidth}{@{}lXX@{}}
+\toprule
+\textbf{Dimension} & \textbf{SMA classiques} & \textbf{Agentic AI} \\
+\midrule
+Nature du raisonnement & Logique, symbolique, déterministe, formellement prouvable & Probabiliste (LLM), flexible, non garanti \\
+Mode de coordination & Protocoles formels (Contract Net, enchères, ACL) & Orchestration souple (\emph{prompt engineering}, \emph{tool calling}) \\
+Rôle de l'apprentissage & Optionnel, extension via MARL & Central : LLM = produit d'un entraînement massif \\
+Maturité & Décennies de recherche, fondements mathématiques solides & Écosystème fragmenté, mémoire limitée, interopérabilité inégale \\
+Explicabilité & Inhérente : règles et protocoles traçables & Déficit structurel des LLM, défi majeur de gouvernance \\
+\bottomrule
+\end{tabularx}
+\caption{Différences structurelles entre SMA classiques et Agentic AI \cite{abouali2026,sma_general_survey,schneider2025,vaidhyanathan_taibi}.}
+\end{table}
+
+\subsection{Apports croisés}
+
+L'analyse comparative dégage cinq apports possibles des SMA à l'Agentic AI :
+
+\begin{enumerate}
+\item \textbf{Protocoles formels de coordination} : Contract Net, enchères et consensus pour structurer la collaboration entre agents LLM \cite{sma_general_survey,sma_cmu_marl,vaidhyanathan_taibi}.
+\item \textbf{Stabilisation par la théorie des jeux} : modéliser les interactions d'agents LLM, anticiper les conflits, garantir des équilibres stables \cite{sma_general_survey,schneider2025}.
+\item \textbf{Formalisation par le modèle BDI} : Beliefs $\rightarrow$ mémoire contextuelle, Desires $\rightarrow$ objectifs, Intentions $\rightarrow$ plan d'action \cite{sma_systemes,sapkota2026,schneider2025}.
+\item \textbf{Gouvernance et vérification formelle} : combler le déficit de gouvernance des systèmes LLM \cite{milosevic_rabhi,hughes2025,patel2025}.
+\item \textbf{Apprentissage coordonné via MARL} : améliorer la coordination dans des environnements dynamiques \cite{sma_cmu_marl,sapkota2026}.
+\end{enumerate}
+
+\noindent\textit{Les SMA ne s'opposent pas à l'Agentic AI : ils constituent un réservoir de solutions formelles et éprouvées capable de combler ses faiblesses actuelles en matière de stabilité, de gouvernance et d'explicabilité} (synthèse \texttt{Etudes/analyse\_comparative\_SMA\_AgenticAI.pdf}).
+
+\section{Synthèse et positionnement du projet}
+\label{sec:synthese_etat_art}
+
+L'état de l'art conduit dans ce chapitre permet de positionner clairement le projet à l'intersection des deux paradigmes.
+
+\paragraph{Héritage SMA classique.} Le système hérite : (i) d'une organisation hiérarchique cognitive (orchestrateur supervisant des agents spécialisés) ; (ii) d'une coordination par état partagé typé, héritière du \emph{blackboard} ; (iii) d'un patron de validation pair-à-pair (A4/A5) qui rappelle les mécanismes de \emph{checks and balances} formels ; (iv) d'une exécution déterministe et tracée, propice à l'audit.
+
+\paragraph{Mobilisation de l'Agentic AI.} Le système emploie : (i) un LLM comme couche cognitive de plusieurs agents (analyse, recherche, évaluation, vérification, rédaction) ; (ii) une boucle planifier-agir-évaluer locale à chaque agent ; (iii) une mémoire vectorielle persistante (RAG) ; (iv) un \emph{tool calling} structuré (recherche web, scraping, base ChromaDB) ; (v) un point d'arrêt humain explicite avant toute action irréversible.
+
+\paragraph{Contribution.} Le présent travail apporte une démonstration concrète qu'un cas d'étude métier (recrutement) peut être traité en exploitant simultanément la rigueur formelle des SMA (typage d'état, \emph{reducers}, routage conditionnel, HITL) et la flexibilité cognitive de l'Agentic AI (raisonnement par LLM, RAG, \emph{tool use}). Cette articulation est argumentée tout au long du rapport, et chaque choix d'implémentation est rapporté à l'un ou l'autre des deux paradigmes.

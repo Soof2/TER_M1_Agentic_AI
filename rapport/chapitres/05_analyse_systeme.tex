@@ -1,20 +1,28 @@
 \chapter{Analyse du système}
 \label{chap:analyse_systeme}
 
-% Ce chapitre rassemble les analyses produites par trois sous-agents
-% spécialisés, chacun couvrant un pan du système :
-%   A. Coeur LangGraph    -> chapitres/05a_coeur_langgraph.tex
-%   B. Outils et RAG      -> chapitres/05b_outils_rag.tex
-%   C. Service et ops     -> chapitres/05c_service_ops.tex
-% L'introduction et la synthèse de fin de chapitre sont rédigées
-% manuellement après réception des trois sous-livrables.
+Ce chapitre analyse en profondeur l'implémentation du système. L'architecture se prêtant naturellement à un découpage en trois pans, le chapitre est structuré en trois sous-chapitres :
 
-\section*{Introduction du chapitre}
-% À rédiger après récupération des sous-livrables.
+\begin{description}[leftmargin=1.4cm,style=nextline]
+\item[\S~5.A] Le \textbf{cœur LangGraph} : topologie, état partagé, patrons de coordination, choix structurants (\texttt{StateGraph}, \emph{Send/Reduce}, \texttt{interrupt\_before}, validation pair-à-pair, choix Ollama).
+\item[\S~5.B] Les \textbf{outils et la mémoire RAG} : pipeline de \emph{sourcing} A3a/b/c, filtre anti-bruit algorithmique, mémoire vectorielle calibrée par fiche.
+\item[\S~5.C] La \textbf{couche service et opérations} : API Gateway FastAPI, streaming SSE, signalement HITL par \texttt{threading.Event}, interface graphique NiceGUI, observabilité, tests, déploiement Docker.
+\end{description}
+
+Chaque sous-chapitre suit la même grille de lecture : présentation des composants, justification argumentée des choix d'implémentation (besoin / alternatives / décision / compromis assumés), et extraits de code commentés. Les choix transversaux (LangGraph, Ollama, ChromaDB, NiceGUI, sources gratuites) sont rappelés et reliés aux argumentaires théoriques du chapitre~\ref{chap:etat_art} et à la décision de \emph{framework} du chapitre~\ref{chap:choix_framework}.
 
 \input{chapitres/05a_coeur_langgraph}
 \input{chapitres/05b_outils_rag}
 \input{chapitres/05c_service_ops}
 
-\section*{Synthèse du chapitre}
-% À rédiger après récupération des sous-livrables.
+\section{Synthèse du chapitre}
+
+L'analyse conduite dans ce chapitre montre que le système réalise effectivement la convergence SMA / Agentic AI annoncée au chapitre~\ref{chap:etat_art}. Trois lectures croisées permettent de le constater.
+
+\paragraph{Lecture SMA classique.} Le système hérite de plusieurs apports formels des SMA. La topologie en graphe orienté typé (\S~5.A) joue le rôle d'un \emph{blackboard} avec contrats explicites entre agents. Le patron de validation pair-à-pair entre A4 et A5 (\S~5.A) implémente une variante des \emph{checks and balances} formels. Le routage conditionnel par seuil rend l'arbitrage explicite et auditable. La mémoire vectorielle calibrée par fiche (\S~5.B) introduit une notion de contexte persistant proche de celle réclamée dans la littérature SMA. Enfin, le HITL via \texttt{interrupt\_before} (\S~5.A et \S~5.C) réalise la \emph{governance and verification} préconisée pour combler le déficit d'explicabilité de l'Agentic AI.
+
+\paragraph{Lecture Agentic AI.} Le système exploite la flexibilité cognitive des LLM partout où elle apporte une plus-value : extraction structurée par A2, génération de requêtes adaptées par A3a, scoring multi-axes par A4, contrôle de cohérence par A5, rédaction de messages par A7. À chaque fois, le LLM est encadré par un schéma de sortie strict (JSON, Markdown), une température contrôlée, et un agent de contrôle indépendant lorsque la décision est sensible. Le RAG fournit la \emph{persistent memory} canonique des architectures agentiques.
+
+\paragraph{Lecture opérationnelle.} La couche service (\S~5.C) traduit ces patrons théoriques en un système exploitable : API Gateway, streaming temps réel, interface multi-pages, déploiement Docker, observabilité JSON. Aucune décision technique n'a été prise sans la rapporter au cahier des charges du chapitre~\ref{chap:cas_etude} et à l'argumentaire théorique du chapitre~\ref{chap:etat_art}. Le couplage entre théorie et implémentation est ainsi explicite et défendable.
+
+Le chapitre suivant tire les conclusions de ce travail et identifie les limites résiduelles ainsi que les perspectives d'évolution.
