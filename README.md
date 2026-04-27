@@ -158,6 +158,21 @@ curl -X POST http://localhost:8000/recruter \
 curl http://localhost:8000/rapport/<run_id>
 ```
 
+### Mode UI local en une commande
+
+```bash
+./run_local.sh
+```
+
+Le script lance l'API sur `http://localhost:8000` et l'UI sur `http://localhost:8080`.
+Arrêt propre des deux serveurs avec `Ctrl+C`.
+
+Ports personnalisés si besoin :
+
+```bash
+API_PORT=8001 UI_PORT=8081 ./run_local.sh
+```
+
 ### Via Docker
 
 ```bash
