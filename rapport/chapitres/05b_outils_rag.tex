@@ -10,13 +10,13 @@ Le pipeline de collecte de candidats (agent A3) se décompose en trois sous-agen
 Le stratège reçoit le profil de compétences extrait par A2 et produit un plan de recherche structuré. Il invoque le LLM avec un \textit{prompt} imposant quatre familles de requêtes optimisées par source : requêtes web générales (avec opérateurs comme \texttt{intitle:CV}), requêtes LinkedIn ciblées (\texttt{site:linkedin.com/in}), requêtes natives pour l'API GitHub (par exemple \texttt{language:Python location:Paris followers:>5}) et requêtes pour agrégateurs de portfolios (Malt, DoYouBuzz). Le \textit{prompt} impose également le respect strict du niveau d'expérience : pour les niveaux « alternant » ou « stagiaire », des exclusions \texttt{-"senior" -"lead"} sont ajoutées en post-traitement. Le stratège produit un dictionnaire \texttt{requetes\_recherche} avec les clés \texttt{queries\_generales}, \texttt{queries\_linkedin}, \texttt{queries\_github}, \texttt{queries\_cv\_sites} et \texttt{tags\_stackoverflow}. Aucun appel réseau n'est effectué à ce stade : le LLM génère les requêtes de manière déclarative.
 
 \paragraph{A3b — Collecteur (\texttt{src/agents/chercheur\_collecteur.py}).}
-Le collecteur exécute en parallèle les requêtes générées par le stratège sur cinq sources gratuites :
+Le collecteur exécute les requêtes générées par le stratège sur cinq sources gratuites :
 \begin{enumerate}
 \item DuckDuckGo pour les requêtes web générales, LinkedIn et portfolios ;
 \item l'API officielle GitHub Search Users (60 requêtes par heure sans \textit{token}, 5\,000 avec un \textit{token} gratuit) ;
 \item l'API Stack Exchange (300 requêtes par jour sans clé, 10\,000 avec clé gratuite).
 \end{enumerate}
-Chaque source retourne des résultats structurés au format unifié \texttt{\{title, url, body, source\}}. Le collecteur agrège l'ensemble, puis effectue une première déduplication par URL. Aucune décision algorithmique ou linguistique n'est appliquée à ce stade : le nœud reste \textit{stateless} et déterministe. Les journaux reportent le nombre de résultats bruts par source, ce qui facilite l'observabilité du bruit amont.
+DuckDuckGo est utilisé comme moteur généraliste avec des opérateurs proches des moteurs classiques : \texttt{site:}, guillemets exacts et exclusions \texttt{-"mot"}. Les recherches LinkedIn ciblent donc les pages de profils publiques avec \texttt{site:linkedin.com/in} ou \texttt{site:fr.linkedin.com/in}, et non \texttt{linkedin.fr}, qui n'est pas le domaine usuel des profils publics. Chaque source retourne des résultats structurés au format unifié \texttt{\{title, url, body, source\}}. Le collecteur agrège l'ensemble, puis effectue une première déduplication par URL. Aucune décision algorithmique ou linguistique n'est appliquée à ce stade : le nœud reste \textit{stateless} et déterministe. Les journaux reportent le nombre de résultats bruts par source, ce qui facilite l'observabilité du bruit amont.
 
 \paragraph{A3c — Filtre (\texttt{src/agents/chercheur\_filtre.py}).}
 Le filtre transforme les hits bruts en profils candidats exploitables via un filtrage algorithmique multi-étapes, sans recours au LLM (voir section suivante). Les profils générés sont limités à \texttt{MAX\_PROFILS\_RECHERCHE} (15 par défaut). Le filtre consigne trois métriques : taux de bruit brut (hits éliminés / hits collectés), nombre d'échecs de \textit{scraping} (repli sur le \textit{snippet} DuckDuckGo) et nombre final de profils exploitables.
@@ -101,6 +101,18 @@ Le seuil de 0,5 est un compromis : trop bas, le RAG retombe dans le biais inter-
 \paragraph{Décision.} DuckDuckGo (via la bibliothèque \texttt{duckduckgo-search}, libre et sans authentification), GitHub Search Users API (publique, gratuite, dédiée aux profils) et Stack Exchange API (publique, orientée tags techniques). Ces trois sources couvrent une part substantielle des profils en ligne sans exposition juridique ni coût.
 
 \paragraph{Tradeoffs.} DuckDuckGo n'offre pas les filtres avancés de LinkedIn et remonte du bruit d'agrégateurs (atténué par A3c). GitHub est puissant pour les profils techniques mais limité aux développeurs ayant un compte public. Stack Overflow privilégie les développeurs expérimentés. La complémentarité des trois canaux absorbe ces limitations.
+
+\subsection{Appels d'outils déterministes plutôt que \texttt{ToolNode}/\texttt{bind\_tools}}
+
+\paragraph{Besoin.} Le système doit être explicable et reproductible : chaque agent a une responsabilité stable, et le pipeline de recrutement doit pouvoir être suivi nœud par nœud dans LangGraph.
+
+\paragraph{Alternatives.} Une architecture de type ReAct aurait consisté à exposer les recherches web, le \textit{scraping} et le RAG comme outils LangChain via \texttt{bind\_tools}, puis à laisser un LLM choisir dynamiquement quels outils appeler à chaque étape. LangGraph propose aussi \texttt{ToolNode} pour exécuter ce type d'appels.
+
+\paragraph{Décision.} Le projet conserve des fonctions outils déterministes appelées explicitement par les nœuds LangGraph : A3b appelle les fonctions de recherche, A3c appelle le \textit{scraper}, A4 lit la mémoire RAG, A8 écrit en ChromaDB. Les wrappers \texttt{@tool} restent disponibles dans \texttt{src/tools/search.py} et \texttt{src/tools/scraping.py}, mais ils ne constituent pas le mécanisme principal d'orchestration.
+
+\paragraph{Justification.} Dans ce cas d'usage, la séquence d'actions est connue à l'avance : analyser, générer des requêtes, collecter, filtrer, dédupliquer, évaluer, vérifier, éventuellement contacter. Confier cette séquence à un agent ReAct ajouterait de la variabilité sans bénéfice fonctionnel majeur. L'approche retenue réduit les coûts en \textit{tokens}, évite les boucles ou appels d'outils inutiles, simplifie les tests et rend les responsabilités auditables dans \texttt{src/graph.py}.
+
+\paragraph{Tradeoffs.} Le système est moins flexible qu'un agent autonome capable d'inventer un nouveau plan d'action. Ce compromis est volontaire : pour un démonstrateur TER centré sur l'architecture multi-agents, la lisibilité, le contrôle et la traçabilité priment sur l'autonomie maximale.
 
 \subsection{Filtrage algorithmique plutôt que LLM}
 

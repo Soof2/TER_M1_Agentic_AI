@@ -53,7 +53,7 @@ def _ddg_search_raw(
     """
     # Construire la requête finale avec exclusions + filtre site éventuel
     parts = []
-    if site_filter:
+    if site_filter and "site:" not in query.lower():
         parts.append(f"site:{site_filter}")
     parts.append(query)
     parts.append(DDG_EXCLUSIONS)

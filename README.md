@@ -18,12 +18,13 @@ START
                           └─► A3c Filtre  (anti-bruit algorithmique)
                                 └─► A6 Déduplicateur
                                       └─► [Send × N] A4 Évaluateur  (parallèle)
-                                                └─► Reduce
-                                                      └─► A5 Vérificateur
-                                                            ├─► A7 Recruteur
-                                                            └─► Rapport
-                                                                  └─► A8 Persistance RAG
-                                                                        └─► END
+                                                └─► Reduce scores
+                                                      └─► [Send × N] A5 Vérificateur (parallèle)
+                                                            └─► Reduce validations
+                                                                  ├─► A7 Recruteur
+                                                                  └─► Rapport
+                                                                        └─► A8 Persistance RAG
+                                                                              └─► END
 ```
 
 ### Patterns SMA implémentés
@@ -31,7 +32,7 @@ START
 |---|---|
 | Superviseur | A1 coordonne via le flux du graphe |
 | Blackboard | `GraphState` TypedDict partagé entre agents |
-| Send / Map-Reduce | A4 évalue N candidats en parallèle (`Send()`) |
+| Send / Map-Reduce | A4 évalue N candidats en parallèle, A5 vérifie N scores en parallèle (`Send()`) |
 | Validation pair-à-pair | A4 produit → A5 contrôle |
 | Routage conditionnel | Score > seuil → A7 / rapport |
 | Human-in-the-loop | `interrupt_before` sur A7 |
@@ -80,11 +81,6 @@ Documentation interactive : `http://localhost:8000/docs`
 ### Interface graphique (NiceGUI)
 Une UI web permet de lancer un run, suivre la timeline live, visualiser le graphe Mermaid, gérer le HITL, consulter les rapports, la mémoire RAG et les métriques.
 
-```bash
-OLLAMA_HOST=http://localhost:11434 uvicorn src.api:app --reload --port 8000
-API_URL=http://localhost:8000 python3 -m src.ui.app
-```
-
 Interface : `http://localhost:8080`
 
 ---
@@ -109,10 +105,14 @@ Interface : `http://localhost:8080`
 
 ### Prérequis
 - Python 3.11+
-- [Ollama](https://ollama.com) installé et un modèle téléchargé
+- [Ollama](https://ollama.com) installé
+- Un modèle Ollama disponible localement ou accessible via Ollama Cloud
 
 ```bash
 ollama pull mistral
+# ou un autre modèle compatible :
+# ollama pull llama3.1
+# ollama pull qwen2.5
 ```
 
 ### Setup
@@ -130,7 +130,61 @@ cp .env.example .env
 
 ---
 
-## Utilisation
+## Lancement rapide
+
+### 1. Démarrer Ollama
+
+Dans un terminal séparé, si Ollama n'est pas déjà lancé :
+
+```bash
+ollama serve
+```
+
+Vérifier que le serveur répond :
+
+```bash
+curl http://localhost:11434/api/tags
+```
+
+### 2. Choisir le modèle
+
+Dans `.env`, modifier :
+
+```env
+OLLAMA_MODEL=mistral
+OLLAMA_PROVIDER=ollama
+```
+
+Le modèle doit exister dans Ollama :
+
+```bash
+ollama list
+ollama pull mistral
+```
+
+### 3. Lancer API + UI en une commande
+
+```bash
+./run_local.sh
+```
+
+Puis ouvrir :
+
+- UI : `http://localhost:8080`
+- API docs : `http://localhost:8000/docs`
+
+Arrêt propre : `Ctrl+C` dans le terminal qui a lancé `./run_local.sh`.
+
+Les logs sont dans :
+
+```bash
+tail -f logs/api_local.log
+tail -f logs/ui_local.log
+```
+
+---
+
+## Modes d'utilisation
 
 ### Mode CLI
 
@@ -146,10 +200,13 @@ OLLAMA_MODEL=mistral python3 -m src.main "Développeur Python senior, 5 ans, Par
 OLLAMA_MODEL=mistral python3 -m src.main --fichier fiche_poste.txt
 ```
 
+Le mode CLI est utile pour tester rapidement le graphe sans interface. Pour la démo, utiliser plutôt l'UI.
+
 ### Mode API REST
 
 ```bash
-OLLAMA_HOST=http://localhost:11434 uvicorn src.api:app --reload --port 8000
+source venv/bin/activate
+uvicorn src.api:app --reload --port 8000
 
 curl -X POST http://localhost:8000/recruter \
   -H "Content-Type: application/json" \
@@ -158,6 +215,28 @@ curl -X POST http://localhost:8000/recruter \
 curl http://localhost:8000/rapport/<run_id>
 ```
 
+Si `OLLAMA_HOST` n'est pas défini, le projet utilise `http://localhost:11434` par défaut.
+
+### Mode UI local manuel
+
+Normalement, utiliser `./run_local.sh`. Si besoin de lancer manuellement :
+
+Terminal 1 :
+
+```bash
+source venv/bin/activate
+uvicorn src.api:app --reload --port 8000
+```
+
+Terminal 2 :
+
+```bash
+source venv/bin/activate
+API_URL=http://localhost:8000 python3 -m src.ui.app
+```
+
+L'UI sera disponible sur `http://localhost:8080`.
+
 ### Mode UI local en une commande
 
 ```bash
@@ -165,7 +244,6 @@ curl http://localhost:8000/rapport/<run_id>
 ```
 
 Le script lance l'API sur `http://localhost:8000` et l'UI sur `http://localhost:8080`.
-Arrêt propre des deux serveurs avec `Ctrl+C`.
 
 Ports personnalisés si besoin :
 
@@ -176,7 +254,8 @@ API_PORT=8001 UI_PORT=8081 ./run_local.sh
 ### Via Docker
 
 ```bash
-echo "OLLAMA_MODEL=mistral" > .env
+cp .env.example .env
+# modifier OLLAMA_MODEL dans .env si besoin
 docker compose up --build
 ```
 
@@ -189,6 +268,76 @@ API_PORT=8001 UI_PORT_HOST=8081 docker compose up --build
 ```
 
 L'API Docker sera alors sur `http://localhost:8001` et l'UI Docker sur `http://localhost:8081`.
+
+Commandes Docker utiles :
+
+```bash
+docker compose ps
+docker compose logs -f sma-api
+docker compose logs -f sma-ui
+docker compose down
+```
+
+Le service Docker `ollama` monte `~/.ollama` dans le conteneur. Les modèles déjà téléchargés sur la machine hôte sont donc réutilisés.
+
+### Mode CLI via Docker
+
+```bash
+docker compose --profile cli run --rm sma-cli python -m src.main --no-interrupt "Développeur Python senior, Paris"
+```
+
+---
+
+## Changer de modèle LLM
+
+Le modèle est choisi avec `OLLAMA_MODEL`.
+
+### En local
+
+1. Télécharger le modèle :
+
+```bash
+ollama pull mistral
+```
+
+2. Modifier `.env` :
+
+```env
+OLLAMA_MODEL=mistral
+OLLAMA_PROVIDER=ollama
+```
+
+3. Relancer le projet :
+
+```bash
+./run_local.sh
+```
+
+### Pour une seule commande
+
+```bash
+OLLAMA_MODEL=mistral ./run_local.sh
+OLLAMA_MODEL=mistral python3 -m src.main --no-interrupt "Développeur Python senior Paris"
+```
+
+### Avec Docker
+
+Modifier `.env`, puis relancer :
+
+```bash
+docker compose up --build
+```
+
+### Modèles conseillés
+
+| Modèle | Usage |
+|---|---|
+| `mistral` | Léger, rapide, correct pour tester |
+| `llama3.1` | Meilleure qualité générale si disponible |
+| `qwen2.5` | Bon respect du JSON selon les versions |
+| `kimi-k2.5:cloud` | Qualité plus élevée si Ollama Cloud est configuré |
+
+Important : A4 et A5 exigent des réponses JSON. Si un modèle ne respecte pas le JSON, le run peut échouer explicitement, surtout sur A5. Dans ce cas, essayer un modèle plus fiable en sortie structurée.
 
 ---
 
@@ -206,13 +355,82 @@ L'API Docker sera alors sur `http://localhost:8001` et l'UI Docker sur `http://l
 | `MAX_PROFILS_RECHERCHE` | `15` | Nombre max de profils collectés |
 | `MAX_PROFILS_PARALLELES` | `10` | Nombre max d'évaluateurs parallèles |
 | `RUNS_DB_PATH` | `data/runs.sqlite` | Base SQLite des runs API |
+| `CHROMADB_DIR` | `data/chromadb` | Base vectorielle RAG |
+| `API_URL` | `http://localhost:8000` | URL API utilisée par l'UI |
+| `API_PORT` | `8000` | Port API pour `run_local.sh` |
+| `UI_PORT` | `8080` | Port UI pour `run_local.sh` |
+| `UI_PORT_HOST` | `8080` | Port UI exposé par Docker |
+
+---
+
+## Dépannage
+
+### `Connection refused` vers Ollama
+
+Vérifier qu'Ollama tourne :
+
+```bash
+ollama serve
+curl http://localhost:11434/api/tags
+```
+
+En Docker, l'API doit utiliser `OLLAMA_HOST=http://ollama:11434`, déjà défini dans `docker-compose.yml`.
+
+### Le modèle n'existe pas
+
+```bash
+ollama list
+ollama pull mistral
+```
+
+Puis mettre le même nom dans `.env`.
+
+### Ports déjà utilisés
+
+Local :
+
+```bash
+API_PORT=8001 UI_PORT=8081 ./run_local.sh
+```
+
+Docker :
+
+```bash
+API_PORT=8001 UI_PORT_HOST=8081 docker compose up --build
+```
+
+### Voir pourquoi un run a échoué
+
+```bash
+tail -f logs/api_local.log
+tail -f logs/ui_local.log
+```
+
+Depuis l'UI, consulter aussi la timeline du run et le statut `run_error`.
+
+### Réinitialiser les données locales
+
+Supprimer l'historique des runs et la mémoire RAG :
+
+```bash
+rm -rf data/runs.sqlite data/chromadb
+```
+
+Ne pas le faire si vous voulez conserver l'historique ou la mémoire de calibration.
 
 ---
 
 ## Tests
 
 ```bash
+source venv/bin/activate
 python3 -m pytest tests/ -v
+```
+
+Tests rapides utiles pendant le développement :
+
+```bash
+python3 -m pytest tests/test_graph.py tests/test_stratege_queries.py tests/test_verificateur_rules.py -q
 ```
 
 Couverture : filtre anti-bruit, déduplication, structure du graphe, routage conditionnel, API REST (62 tests).

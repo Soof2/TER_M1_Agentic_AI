@@ -59,8 +59,9 @@ def persistance_node(state: GraphState) -> dict:
     n_persistes = 0
 
     for candidat in candidats_valides:
-        # Ne pas persister les candidats invalides (bruit détecté par A5)
-        if candidat.get("statut") == "invalide":
+        # Ne persister que les profils réellement validés. Les douteux restent
+        # visibles dans le rapport mais ne doivent pas calibrer les runs futurs.
+        if candidat.get("statut") != "valide":
             continue
 
         profil = profils_idx.get(candidat["candidat_id"], {})

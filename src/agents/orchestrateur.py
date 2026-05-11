@@ -9,12 +9,9 @@ Ce module contient aussi le nœud de rapport final et le nœud de
 réduction des scores (fan-in après Send).
 """
 
-from langchain_classic.chat_models import init_chat_model
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 
 from src.state import GraphState
-from src.config import OLLAMA_MODEL, OLLAMA_PROVIDER
-from src.prompts import ORCHESTRATEUR_RAPPORT_SYSTEM
 from src.observabilite import get_metrics
 from src.logger import get_logger
 
@@ -49,24 +46,76 @@ def reduce_scores_node(state: GraphState) -> dict:
     }
 
 
+def reduce_validations_node(state: GraphState) -> dict:
+    """Nœud de réduction : agrège les validations A5 parallèles."""
+    log = get_logger("reduce")
+    candidats = state.get("candidats_valides", [])
+    n_valides = sum(1 for c in candidats if c.get("statut") == "valide")
+    n_douteux = sum(1 for c in candidats if c.get("statut") == "douteux")
+    n_invalides = sum(1 for c in candidats if c.get("statut") == "invalide")
+    log.info(
+        "Fan-in A5 : %d validations agrégées (%d valides, %d douteux, %d invalides).",
+        len(candidats), n_valides, n_douteux, n_invalides,
+    )
+    return {
+        "messages": [
+            HumanMessage(
+                content=(
+                    f"[Réduction A5] {len(candidats)} validations : "
+                    f"{n_valides} valides, {n_douteux} douteux, {n_invalides} invalides."
+                )
+            )
+        ]
+    }
+
+
+def _valeur(value) -> str:
+    if value in (None, "", []):
+        return "Non renseigné"
+    if isinstance(value, list):
+        return ", ".join(str(v) for v in value) if value else "Non renseigné"
+    return str(value)
+
+
+def _ligne_table(cells: list[str]) -> str:
+    return "| " + " | ".join(str(c).replace("\n", " ").replace("|", "/") for c in cells) + " |"
+
+
+def _table_candidats(candidats: list[dict], profils_par_id: dict[str, dict]) -> str:
+    if not candidats:
+        return "Aucun."
+    lignes = [
+        _ligne_table(["Nom", "Lieu / source", "Lien", "Score", "Statut", "Remarques"]),
+        _ligne_table(["---", "---", "---", "---:", "---", "---"]),
+    ]
+    for c in sorted(candidats, key=lambda x: x.get("score_final", 0), reverse=True):
+        profil = profils_par_id.get(c.get("candidat_id"), {})
+        lieu_source = _valeur(profil.get("source"))
+        lien = profil.get("url") or "Non renseigné"
+        lignes.append(_ligne_table([
+            c.get("nom", "Non renseigné"),
+            lieu_source,
+            lien,
+            f"{float(c.get('score_final', 0)):.1f}",
+            c.get("statut", "douteux"),
+            c.get("remarques", ""),
+        ]))
+    return "\n".join(lignes)
+
+
 def rapport_node(state: GraphState) -> dict:
     """Produit le rapport final en agrégeant les résultats de tous les agents."""
     _log.info("Génération du rapport final...")
-    llm = init_chat_model(OLLAMA_MODEL, model_provider=OLLAMA_PROVIDER, temperature=0.3)
 
-    # Assembler les données pour le rapport
     profil = state.get("profil_competences", {})
     n_bruts = len(state.get("profils_bruts", []))
     n_dedup = len(state.get("profils_dedupliques", []))
-    candidats_valides = state.get("candidats_valides", [])
+    candidats_verifies = state.get("candidats_valides", [])
+    candidats_valides = [c for c in candidats_verifies if c.get("statut") == "valide"]
+    candidats_douteux = [c for c in candidats_verifies if c.get("statut") == "douteux"]
+    candidats_invalides = [c for c in candidats_verifies if c.get("statut") == "invalide"]
     messages_envoyes = state.get("messages_envoyes", [])
-
-    candidats_summary = ""
-    for c in sorted(candidats_valides, key=lambda x: x["score_final"], reverse=True):
-        candidats_summary += (
-            f"- {c['nom']} | Score: {c['score_final']} | "
-            f"Statut: {c['statut']} | {c['remarques']}\n"
-        )
+    profils_par_id = {p.get("id"): p for p in state.get("profils_dedupliques", [])}
 
     # Exporter les métriques d'observabilité
     m = get_metrics()
@@ -76,46 +125,63 @@ def rapport_node(state: GraphState) -> dict:
         n_profils_dedup=n_dedup,
         n_scores=len(state.get("candidats_scores", [])),
         n_valides=len(candidats_valides),
+        n_douteux=len(candidats_douteux),
+        n_invalides=len(candidats_invalides),
         n_messages=len(messages_envoyes),
     )
-    metriques_export = m.exporter()
     metriques_resume = m.resume_texte()
 
-    rapport_msg = f"""Données du processus de recrutement :
+    messages_section = "Aucun message généré."
+    if messages_envoyes:
+        messages_section = "\n".join(
+            f"- {msg.get('nom', 'Candidat')} ({msg.get('canal', 'canal non précisé')}) : {msg.get('objet', 'Sans objet')}"
+            for msg in messages_envoyes
+        )
 
-FICHE DE POSTE :
-{state.get('fiche_poste', 'N/A')}
+    rapport = f"""# Rapport final de recrutement
 
-PROFIL DE COMPÉTENCES EXTRAIT :
-{profil}
+## Résumé du poste
+- Fiche de poste : {state.get('fiche_poste', 'Non renseignée')}
+- Hard skills : {_valeur(profil.get('hard_skills'))}
+- Soft skills : {_valeur(profil.get('soft_skills'))}
+- Niveau d'expérience attendu : {_valeur(profil.get('niveau_experience', profil.get('niveau_seniorite')))}
+- Expérience attendue : min {_valeur(profil.get('experience_min'))} an(s), max {_valeur(profil.get('experience_max'))}
+- Type de contrat : {_valeur(profil.get('type_contrat'))}
+- Localisation(s) : {_valeur(profil.get('localisations'))}
+- Contraintes : {_valeur(profil.get('contraintes'))}
 
-STATISTIQUES :
+## Statistiques de recherche
 - Profils trouvés : {n_bruts}
 - Profils après déduplication : {n_dedup}
 - Candidats évalués : {len(state.get('candidats_scores', []))}
-- Candidats validés : {len(candidats_valides)}
-- Messages envoyés : {len(messages_envoyes)}
+- Candidats valides : {len(candidats_valides)}
+- Candidats douteux : {len(candidats_douteux)}
+- Profils invalides / non-candidats : {len(candidats_invalides)}
+- Messages générés : {len(messages_envoyes)}
 
-CLASSEMENT DES CANDIDATS :
-{candidats_summary if candidats_summary else 'Aucun candidat validé'}
+## Candidats valides à contacter
+{_table_candidats(candidats_valides, profils_par_id)}
 
-MESSAGES ENVOYÉS :
-{len(messages_envoyes)} message(s) de contact
+## Candidats douteux à vérifier manuellement
+{_table_candidats(candidats_douteux, profils_par_id)}
 
-MÉTRIQUES D'EXÉCUTION :
+## Profils invalides ou non-candidats
+{_table_candidats(candidats_invalides, profils_par_id)}
+
+## Messages générés
+{messages_section}
+
+## Recommandations
+- Contacter uniquement les candidats au statut `valide`.
+- Vérifier manuellement les candidats `douteux` avant toute prise de contact.
+- Ignorer les profils `invalides`, les pages d'école, les articles, les offres d'emploi et les agrégateurs.
+
+## Métriques d'exécution
 {metriques_resume}
-
-Produis le rapport final structuré."""
-
-    messages = [
-        SystemMessage(content=ORCHESTRATEUR_RAPPORT_SYSTEM),
-        HumanMessage(content=rapport_msg)
-    ]
-
-    response = llm.invoke(messages)
+"""
     _log.info("Rapport final généré.")
 
     return {
-        "rapport_final": response.content,
-        "messages": [response]
+        "rapport_final": rapport,
+        "messages": [HumanMessage(content="[Rapport] Rapport final déterministe généré.")]
     }

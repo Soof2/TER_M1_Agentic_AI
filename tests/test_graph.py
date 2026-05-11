@@ -27,7 +27,7 @@ class TestStructureGraphe:
             "orchestrateur", "analyste",
             "chercheur_stratege", "chercheur_collecteur", "chercheur_filtre",
             "deduplicateur", "evaluateur", "reduce_scores",
-            "verificateur", "recruteur", "rapport", "persistance",
+            "verificateur", "reduce_validations", "recruteur", "rapport", "persistance",
         }
         assert attendus.issubset(noeuds)
 
@@ -35,9 +35,9 @@ class TestStructureGraphe:
         noeuds = set(app.get_graph().nodes.keys())
         assert "persistance" in noeuds
 
-    def test_13_noeuds_au_total(self, app):
-        # __start__ + 11 agents + persistance + __end__ = 14
-        assert len(app.get_graph().nodes) == 14
+    def test_14_noeuds_au_total(self, app):
+        # __start__ + 12 nœuds métier + persistance + __end__ = 15
+        assert len(app.get_graph().nodes) == 15
 
     def test_aretes_pipeline_a3(self, app):
         """A3a -> A3b -> A3c -> deduplicateur."""
@@ -49,6 +49,10 @@ class TestStructureGraphe:
     def test_arete_rapport_persistance(self, app):
         edges = {(e[0], e[1]) for e in app.get_graph().edges}
         assert ("rapport", "persistance") in edges
+
+    def test_arete_verificateur_reduce_validations(self, app):
+        edges = {(e[0], e[1]) for e in app.get_graph().edges}
+        assert ("verificateur", "reduce_validations") in edges
 
     def test_interrupt_before_recruteur(self):
         app_interrupt = build_graph(with_interrupt=True)
@@ -103,3 +107,17 @@ class TestRoutageConditionnel:
             _valide(score=5.0, statut="invalide"),
         ]}
         assert route_apres_verification(state) == "rapport"
+
+    def test_douteux_score_eleve_ne_route_pas_recruteur(self):
+        """Un profil douteux ne doit jamais etre contacte automatiquement."""
+        state = {"candidats_valides": [
+            _valide(score=90.0, statut="douteux"),
+        ]}
+        assert route_apres_verification(state) == "rapport"
+
+    def test_seuls_les_valides_comptent_pour_le_routage(self):
+        state = {"candidats_valides": [
+            _valide(score=95.0, statut="douteux"),
+            _valide(score=60.0, statut="valide"),
+        ]}
+        assert route_apres_verification(state) == "recruteur"

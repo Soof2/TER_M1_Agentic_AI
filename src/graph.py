@@ -5,13 +5,14 @@ Architecture :
     START → orchestrateur → analyste
           → chercheur_stratege (A3a) → chercheur_collecteur (A3b) → chercheur_filtre (A3c)
           → deduplicateur
-          → [Send() × N] evaluateur → reduce_scores → verificateur
+          → [Send() × N] evaluateur → reduce_scores
+          → [Send() × N] verificateur → reduce_validations
           → (conditionnel) recruteur | rapport → END
 
 Patterns SMA implémentés :
     - Superviseur (A1 coordonne via le flux du graphe)
     - Blackboard (GraphState partagé avec droits d'écriture séparés)
-    - Send/Map-Reduce (A4 × N instances parallèles)
+    - Send/Map-Reduce (A4 et A5 × N instances parallèles)
     - Validation pair-à-pair (A4 produit → A5 contrôle)
     - Routage conditionnel (score → A7 / rapport / fin)
     - Human-in-the-loop (interrupt_before sur A7)
@@ -33,7 +34,7 @@ from src.observabilite import get_metrics
 
 _log = get_logger("graph")
 
-from src.agents.orchestrateur import orchestrateur_node, reduce_scores_node, rapport_node
+from src.agents.orchestrateur import orchestrateur_node, reduce_scores_node, reduce_validations_node, rapport_node
 from src.agents.analyste import analyste_node
 from src.agents.chercheur_stratege import stratege_node
 from src.agents.chercheur_collecteur import collecteur_node
@@ -76,18 +77,40 @@ def route_to_evaluateurs(state: GraphState) -> list[Send]:
     ]
 
 
+def route_to_verificateurs(state: GraphState) -> list[Send]:
+    """Fan-out : envoie chaque score A4 vers une instance A5 indépendante."""
+    scores = state.get("candidats_scores", [])
+    if not scores:
+        _log.warning("Aucun score à vérifier, passage direct à la réduction A5.")
+        return [Send("reduce_validations", {})]
+
+    profils_par_id = {p["id"]: p for p in state.get("profils_dedupliques", [])}
+    _log.info("Fan-out A5 : envoi de %d score(s) vers %d vérificateurs parallèles.", len(scores), len(scores))
+    return [
+        Send("verificateur", {
+            "candidat_score": score,
+            "profil_source": profils_par_id.get(score["candidat_id"], {}),
+            "profil_competences": state["profil_competences"],
+        })
+        for score in scores
+    ]
+
+
 def route_apres_verification(state: GraphState) -> str:
     """Routage conditionnel après vérification par A5.
 
     Routage absolu :
     - meilleur score >= SCORE_SEUIL_CONTACT → recruteur (A7 contacte)
 
-    Routage relatif (fallback) :
+    Routage relatif :
     - si aucun >= seuil mais au moins 1 >= SCORE_SEUIL_VIABLE → recruteur
       avec les TOP_N_RELATIF meilleurs (signalés comme "relatif")
     - sinon → rapport (aucun candidat viable)
     """
-    candidats_valides = state.get("candidats_valides", [])
+    candidats_valides = [
+        c for c in state.get("candidats_valides", [])
+        if c.get("statut") == "valide"
+    ]
 
     if not candidats_valides:
         _log.info("Routage : aucun candidat validé -> rapport.")
@@ -143,6 +166,7 @@ def build_graph(with_interrupt: bool = True) -> StateGraph:
     graph.add_node("evaluateur", evaluateur_node)
     graph.add_node("reduce_scores", reduce_scores_node)
     graph.add_node("verificateur", verificateur_node)
+    graph.add_node("reduce_validations", reduce_validations_node)
     graph.add_node("recruteur", recruteur_node)
     graph.add_node("rapport", rapport_node)
     graph.add_node("persistance", persistance_node)  # A8 — mémoire RAG
@@ -167,12 +191,19 @@ def build_graph(with_interrupt: bool = True) -> StateGraph:
     # --- Fan-in : évaluateur → reduce_scores (synchronisation) ---
     graph.add_edge("evaluateur", "reduce_scores")
 
-    # --- Reduce → vérificateur ---
-    graph.add_edge("reduce_scores", "verificateur")
+    # --- Fan-out : reduce_scores → N × vérificateur via Send() ---
+    graph.add_conditional_edges(
+        "reduce_scores",
+        route_to_verificateurs,
+        ["verificateur", "reduce_validations"]
+    )
+
+    # --- Fan-in : vérificateur → reduce_validations ---
+    graph.add_edge("verificateur", "reduce_validations")
 
     # --- Routage conditionnel après vérification ---
     graph.add_conditional_edges(
-        "verificateur",
+        "reduce_validations",
         route_apres_verification,
         {
             "recruteur": "recruteur",

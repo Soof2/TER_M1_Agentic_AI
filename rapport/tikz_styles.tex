@@ -59,5 +59,38 @@
   group/.style={rectangle, rounded corners=6pt, draw=gray!50, dashed,
     line width=0.5pt, inner sep=10pt},
   noteblock/.style={rectangle, draw=gray!50, fill=yellow!8,
-    rounded corners=2pt, align=left, font=\footnotesize, inner sep=5pt}
+    rounded corners=2pt, align=left, font=\footnotesize, inner sep=5pt},
+  umlclass/.style={
+    rectangle, draw=cAgent, fill=cAgentBg, line width=0.5pt,
+    inner sep=0pt, font=\small, text width=4.6cm
+  },
+  umlinterface/.style={
+    rectangle, rounded corners=8pt, draw=cStore, fill=cStoreBg,
+    line width=0.6pt, minimum width=2.4cm, minimum height=0.8cm,
+    align=center, font=\small
+  },
+  uccomponent/.style={
+    rectangle, rounded corners=4pt, draw=cAgent, fill=cAgentBg,
+    line width=0.6pt, minimum width=2.6cm, minimum height=1.0cm,
+    align=center, font=\small, text width=2.6cm
+  },
+  ucactor/.style={font=\small, align=center},
+  ucase/.style={
+    ellipse, draw=cAgent, fill=cAgentBg, line width=0.5pt,
+    minimum width=3.2cm, minimum height=0.9cm,
+    align=center, font=\footnotesize, inner sep=2pt
+  },
+  ucsystem/.style={rectangle, draw=cAgent, dashed, line width=0.5pt,
+    rounded corners=4pt, inner sep=10pt}
 }
+
+% Macro pour dessiner un acteur UML stickman
+\newcommand{\ucactorperson}[1]{%
+  \begin{tikzpicture}[baseline=(label.base)]
+    \draw[cAgent, line width=0.6pt] (0,0) circle (0.18);
+    \draw[cAgent, line width=0.6pt] (0,-0.18) -- (0,-0.85);
+    \draw[cAgent, line width=0.6pt] (-0.35,-0.45) -- (0.35,-0.45);
+    \draw[cAgent, line width=0.6pt] (0,-0.85) -- (-0.30,-1.30);
+    \draw[cAgent, line width=0.6pt] (0,-0.85) -- (0.30,-1.30);
+    \node[font=\footnotesize, below=0pt] (label) at (0,-1.40) {#1};
+  \end{tikzpicture}}

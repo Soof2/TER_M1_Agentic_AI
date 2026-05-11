@@ -84,6 +84,32 @@ _NOISE_KEYWORDS = (
     "hire it people",
     "search resumes",
     "post a job",
+    # Pages utiles pour un étudiant humain, mais pas des profils candidats.
+    "groupe alternance",
+    "école supérieure",
+    "ecole supérieure",
+    "formation en alternance",
+    "recrutement en alternance",
+    "trouver un emploi en alternance",
+    "raisons de tenter le recrutement",
+    "walt community",
+    "adopte1alternant",
+    "trouvez un freelance",
+    "sélectionnez",
+    "selectionnez",
+    "recevez gratuitement",
+    "les formations à",
+    "les formations a",
+    "formation react",
+    "angular vs react",
+    "quel framework front-end choisir",
+    "spécialiste du travail",
+    "specialiste du travail",
+    "prof de python",
+    "€/h",
+    "avis",
+    "élèves accompagnés",
+    "eleves accompagnés",
 )
 
 # Domaines d'agrégateurs. Testés sur l'URL uniquement (plus fiable que le
@@ -125,6 +151,14 @@ _NOISE_DOMAINS = (
     "reed.co.uk",
     "totaljobs.com",
     "jobsite.co.uk",
+    # Pages qui listent des prestataires, formations ou cours, pas des profils
+    # candidats directement contactables dans le cadre du recrutement.
+    "codeur.com",
+    "freelance-informatique.fr",
+    "orsys.fr",
+    "humancoders.com",
+    "aquilapp.fr",
+    "superprof.fr",
 )
 
 # Fragments de chemin URL qui trahissent une page d'offre (indépendamment du domaine)

@@ -8,9 +8,9 @@ LATEX := pdflatex -interaction=nonstopmode -halt-on-error
 
 all: $(MAIN).pdf
 
-$(MAIN).pdf: $(MAIN).tex chapitres/*.tex biblio.bib garde.tex
+$(MAIN).pdf: $(MAIN).tex chapitres/*.tex biblio.bib garde.tex tikz_styles.tex figures/*.tex
 	$(LATEX) $(MAIN).tex
-	-bibtex $(MAIN)
+	-biber $(MAIN)
 	$(LATEX) $(MAIN).tex
 	$(LATEX) $(MAIN).tex
 

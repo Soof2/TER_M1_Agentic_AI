@@ -53,6 +53,10 @@ Trois cas d'usage principaux structurent l'interaction.
 
 \paragraph{UC-3 — Consulter le rapport et la mémoire.} Une fois le pipeline terminé, le recruteur peut consulter le rapport final, l'historique des \emph{runs} précédents, et explorer la mémoire vectorielle (recherche de profils similaires, statistiques par fiche).
 
+La figure~\ref{fig:cas_utilisation} formalise l'ensemble des cas d'utilisation et des acteurs (le recruteur humain et les acteurs externes mobilisés par le système).
+
+\input{figures/fig11_cas_utilisation}
+
 \section{Vue d'ensemble de l'architecture}
 \label{sec:archi_overview}
 
@@ -100,7 +104,9 @@ Tous les agents communiquent via un état partagé typé \texttt{GraphState} (\t
 \item \texttt{metriques} : journal d'observabilité.
 \end{itemize}
 
-Les champs lus/écrits par plusieurs agents en parallèle sont annotés \texttt{Annotated[list, operator.add]} pour garantir la cohérence des écritures concurrentes.
+Les champs lus/écrits par plusieurs agents en parallèle sont annotés \texttt{Annotated[list, operator.add]} pour garantir la cohérence des écritures concurrentes. La figure~\ref{fig:classes} en donne une vue UML simplifiée, accompagnée des structures \texttt{Candidat}, \texttt{CandidatScore} et \texttt{CandidatValide} produites successivement par les agents, ainsi que des services transverses \texttt{MemoireRAG} et \texttt{PipelineMetrics}.
+
+\input{figures/fig12_classes}
 
 \subsection{Stack technique}
 
@@ -127,6 +133,10 @@ Tests automatisés          & \texttt{pytest} \\
 \end{tabular}
 \caption{Stack technique du système. Chaque choix est justifié au chapitre~\ref{chap:analyse_systeme}.}
 \end{table}
+
+La figure~\ref{fig:archi_appli} synthétise l'architecture en composants : trois couches (présentation, service, orchestration) et trois capacités mobilisées (recherche, mémoire vectorielle, LLM).
+
+\input{figures/fig13_architecture_appli}
 
 \section{Périmètre du système}
 \label{sec:perimetre}

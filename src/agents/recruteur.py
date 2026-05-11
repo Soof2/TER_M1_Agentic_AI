@@ -28,7 +28,10 @@ def recruteur_node(state: GraphState) -> dict:  # noqa: C901
     """
     m = get_metrics()
     m.debut("A7_recruteur")
-    candidats_valides = state.get("candidats_valides", [])
+    candidats_valides = [
+        c for c in state.get("candidats_valides", [])
+        if c.get("statut") == "valide"
+    ]
     fiche_poste = state.get("fiche_poste", "")
 
     # Mode absolu : candidats clairement au-dessus du seuil

@@ -13,151 +13,328 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from src.state import GraphState, CandidatValide
 from src.config import OLLAMA_MODEL, OLLAMA_PROVIDER
-from src.prompts import VERIFICATEUR_SYSTEM
 from src.observabilite import get_metrics
 from src.logger import get_logger
 
 _log = get_logger("A5_verificateur")
 
 
-def _profil_trop_experimente(profil_brut: str) -> bool:
-    """Détecte les signaux simples de profil trop senior pour alternance/junior."""
-    texte = profil_brut.lower()
+_VERIFICATEUR_UNITAIRE_SYSTEM = """Tu es le vérificateur A5 d'un système de recrutement.
+Tu contrôles UN seul candidat à la fois à partir du score A4, du profil brut et du profil requis.
+
+Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans texte autour :
+{
+  "candidat_id": "...",
+  "nom": "...",
+  "score_final": 0,
+  "statut": "valide|douteux|invalide",
+  "remarques": "..."
+}
+
+Règles strictes :
+- "valide" uniquement si le profil décrit clairement une personne ET montre des compétences liées au poste.
+- "invalide" si c'est une page entreprise, formation, article, annuaire, offre, professeur/cours ou profil hors métier.
+- "douteux" si c'est une personne possible mais avec preuves insuffisantes ou incohérences.
+- Ne valide pas un profil seulement parce que le score A4 est élevé."""
+
+
+_SKILL_ALIASES = {
+    "python": ("python",),
+    "fastapi": ("fastapi", "fast api"),
+    "langgraph": ("langgraph", "lang graph"),
+    "docker": ("docker", "container", "conteneur"),
+    "rag": (" rag ", "retrieval augmented generation", "retrieval-augmented generation"),
+    "java": ("java",),
+    "javascript": ("javascript", "js"),
+    "typescript": ("typescript", "ts"),
+    "react": ("react", "reactjs", "react.js"),
+    "angular": ("angular",),
+    "sql": ("sql",),
+    "postgresql": ("postgresql", "postgres"),
+    "mongodb": ("mongodb", "mongo"),
+    "kubernetes": ("kubernetes", "k8s"),
+    "git": (" git ", "github", "gitlab"),
+}
+
+
+def _texte_normalise(*parts: str) -> str:
+    return f" {' '.join(str(p or '').lower() for p in parts)} "
+
+
+def _skill_present(skill: str, texte: str) -> bool:
+    key = skill.lower().strip()
+    aliases = _SKILL_ALIASES.get(key, (key,))
+    for alias in aliases:
+        alias = alias.strip()
+        if re.search(rf"(?<![a-z0-9+#]){re.escape(alias)}(?![a-z0-9+#])", texte):
+            return True
+    return False
+
+
+def _preuves_competences(profil_requis: dict, nom: str, profil_brut: str) -> tuple[int, list[str], list[str]]:
+    """Compte les hard skills réellement visibles dans le profil candidat."""
+    hard_skills = [s for s in profil_requis.get("hard_skills", []) if s]
+    texte = _texte_normalise(nom, profil_brut)
+    presentes = [skill for skill in hard_skills if _skill_present(skill, texte)]
+    absentes = [skill for skill in hard_skills if skill not in presentes]
+    return len(presentes), presentes, absentes
+
+
+def _role_tech_compatible(nom: str, profil_brut: str) -> bool:
+    texte = _texte_normalise(nom, profil_brut)
     marqueurs = (
-        "senior", "lead", "manager", "architecte", "principal",
-        "confirmé", "confirme", "head of", "cto", "directeur",
-        "10 ans", "10+ ans", "15 ans", "20 ans",
+        "développeur", "developpeur", "developer", "software engineer",
+        "backend", "fullstack", "full stack", "data engineer", "ml engineer",
+        "architecte logiciel", "software architect", "lead developer",
+        "tech lead", "ingénieur logiciel", "ingenieur logiciel",
+        "étudiant", "etudiant", "student", "epitech", "projets",
     )
     return any(m in texte for m in marqueurs)
 
 
-def verificateur_node(state: GraphState) -> dict:
-    """Vérifie et valide les scores des candidats."""
-    m = get_metrics()
-    m.debut("A5_verificateur")
-    candidats_scores = state.get("candidats_scores", [])
-    _log.info("Vérification de %d candidats scorés...", len(candidats_scores))
+def _adequation_minimale(
+    profil_requis: dict,
+    nom: str,
+    profil_brut: str,
+) -> tuple[bool, str]:
+    """Verrou anti-faux positifs : score LLM élevé ne suffit pas."""
+    n_presentes, presentes, absentes = _preuves_competences(profil_requis, nom, profil_brut)
+    n_requises = len([s for s in profil_requis.get("hard_skills", []) if s])
+    if n_requises == 0:
+        return True, ""
 
-    if not candidats_scores:
-        _log.warning("Aucun candidat à vérifier.")
-        return {"candidats_valides": []}
+    minimum = 2 if n_requises >= 3 else 1
+    if n_presentes < minimum:
+        return (
+            False,
+            f"Compétences insuffisamment prouvées dans le profil ({', '.join(presentes) or 'aucune'} ; manquantes : {', '.join(absentes[:4])}).",
+        )
+    if not _role_tech_compatible(nom, profil_brut):
+        return False, "Profil personne détecté mais rôle technique compatible non prouvé."
+    return True, ""
 
-    llm = init_chat_model(OLLAMA_MODEL, model_provider=OLLAMA_PROVIDER, temperature=0)
 
-    # Construire un index des profils bruts par ID pour croisement
-    profils_par_id = {}
-    for p in state.get("profils_dedupliques", []):
-        profils_par_id[p["id"]] = p
+def _profil_non_candidat(nom: str, profil_brut: str, url: str = "") -> bool:
+    """Détecte les pages qui ne décrivent pas une personne candidate."""
+    texte = f"{nom} {profil_brut} {url}".lower()
+    marqueurs = (
+        "offre d'emploi", "offres d'emploi", "trouver un emploi",
+        "recrutement en alternance", "raisons de tenter", "article",
+        "blog", "école supérieure", "ecole supérieure", "école superieure",
+        "groupe alternance", "formation en alternance", "campus",
+        "adopte1alternant", "walt community", "annuaire", "job board",
+        "trouvez un freelance", "sélectionnez", "selectionnez",
+        "recevez gratuitement", "formation react", "les formations à",
+        "les formations a", "angular vs react", "quel framework front-end choisir",
+        "spécialiste du travail", "specialiste du travail", "prof de python",
+        "€/h", "avis", "élèves accompagnés", "eleves accompagnés",
+        "codeur.com/developpeur", "freelance-informatique.fr",
+        "orsys.fr", "humancoders.com/formations", "aquilapp.fr/ressources",
+        "superprof.fr",
+    )
+    return any(m in texte for m in marqueurs)
 
-    # Préparer les données complètes : scores + profils bruts
-    profil_requis = state.get("profil_competences", {})
-    candidats_info = []
-    for cs in candidats_scores:
-        entry = {
-            "candidat_id": cs["candidat_id"],
-            "nom": cs["nom"],
-            "score_global": cs["score_global"],
-            "scores_detail": cs["scores_detail"],
-            "resume_evaluateur": cs["resume"]
-        }
-        # Ajouter le profil brut pour que A5 puisse vérifier les incohérences
-        profil_brut = profils_par_id.get(cs["candidat_id"])
-        if profil_brut:
-            entry["profil_brut"] = profil_brut["profil_brut"]
-            entry["source"] = profil_brut["source"]
-        candidats_info.append(entry)
 
-    verif_msg = f"""Voici les candidats évalués à vérifier. Pour chaque candidat, tu as :
-- Le score et le résumé de l'évaluateur (A4)
-- Le profil brut original pour croiser les informations
+def _profil_personne_probable(nom: str, profil_brut: str, source: str, url: str) -> bool:
+    """Heuristique conservatrice : page publique qui ressemble à une personne."""
+    texte = f"{nom} {profil_brut}".lower()
+    url_lower = (url or "").lower()
+    if _profil_non_candidat(nom, profil_brut, url):
+        return False
+    if "linkedin" in source and "/in/" in url_lower:
+        return not any(m in texte for m in ("spécialiste du travail", "specialiste du travail", "recrutement", "agence"))
+    if "malt.fr/profile/" in url_lower:
+        return True
+    if "github.com/" in url_lower and not any(p in url_lower for p in ("/topics/", "/orgs/", "/marketplace/")):
+        return True
+    return bool(re.search(r"\b[A-ZÉÈÀÂÎÔÛÇ][a-zA-ZÀ-ÖØ-öø-ÿ'’-]+\s+[A-ZÉÈÀÂÎÔÛÇ][a-zA-ZÀ-ÖØ-öø-ÿ'’.]+\b", nom))
 
-Profil requis :
+
+def _profil_senior(profil_brut: str) -> bool:
+    texte = profil_brut.lower()
+    marqueurs = (
+        "senior", "lead", "manager", "architecte", "principal",
+        "confirmé", "confirme", "head of", "cto", "directeur",
+        "tech lead", "staff engineer", "principal engineer",
+    )
+    annees = re.search(r"\b([6-9]|1[0-9]|2[0-9])\s*\+?\s*ans\b", texte)
+    return any(m in texte for m in marqueurs) or bool(annees)
+
+
+def _profil_debutant(profil_brut: str) -> bool:
+    texte = profil_brut.lower()
+    marqueurs = (
+        "alternant", "alternance", "stagiaire", "stage", "étudiant",
+        "etudiant", "apprenti", "apprentissage", "junior", "débutant",
+        "debutant", "bac+2", "bac+3", "master 1", "master 2",
+    )
+    return any(m in texte for m in marqueurs)
+
+
+def _experience_incompatible(profil_brut: str, niveau_requis: str) -> tuple[bool, str]:
+    """Applique le filtrage d'expérience demandé par la fiche de poste."""
+    if niveau_requis in ("alternant", "stagiaire", "junior") and _profil_senior(profil_brut):
+        return True, f"Profil trop expérimenté pour un niveau {niveau_requis}."
+    if niveau_requis == "senior" and _profil_debutant(profil_brut) and not _profil_senior(profil_brut):
+        return True, "Profil trop junior pour un niveau senior."
+    return False, ""
+
+
+def _profil_court(profil_brut: str, max_chars: int = 1600) -> str:
+    texte = " ".join(str(profil_brut or "").split())
+    if len(texte) <= max_chars:
+        return texte
+    return texte[:max_chars] + " [...]"
+
+
+def _parse_validation_json(content: str) -> dict:
+    """Parse une réponse A5 même si le modèle ajoute des fences ou du texte."""
+    cleaned = (content or "").strip()
+    if "```" in cleaned:
+        parts = cleaned.split("```")
+        cleaned = parts[1] if len(parts) > 1 else cleaned
+        if cleaned.strip().startswith("json"):
+            cleaned = cleaned.strip()[4:]
+    cleaned = cleaned.strip()
+
+    for candidate in (
+        cleaned,
+        re.search(r"\{.*\}", cleaned, re.DOTALL).group(0) if re.search(r"\{.*\}", cleaned, re.DOTALL) else "",
+        re.search(r"\[.*\]", cleaned, re.DOTALL).group(0) if re.search(r"\[.*\]", cleaned, re.DOTALL) else "",
+    ):
+        if not candidate:
+            continue
+        parsed = json.loads(candidate)
+        if isinstance(parsed, list):
+            if not parsed:
+                raise ValueError("Liste JSON vide")
+            parsed = parsed[0]
+        if isinstance(parsed, dict):
+            return parsed
+    raise ValueError("Aucun objet JSON valide trouvé")
+
+
+def _verifier_candidat_llm(llm, profil_requis: dict, cs: dict, profil_source: dict) -> tuple[dict, object | None]:
+    candidat_info = {
+        "candidat_id": cs["candidat_id"],
+        "nom": cs["nom"],
+        "score_global_A4": cs["score_global"],
+        "scores_detail_A4": cs.get("scores_detail", {}),
+        "resume_A4": cs.get("resume", ""),
+        "source": profil_source.get("source", ""),
+        "url": profil_source.get("url", ""),
+        "profil_brut": _profil_court(profil_source.get("profil_brut", "")),
+    }
+    verif_msg = f"""Profil requis :
 {json.dumps(profil_requis, ensure_ascii=False, indent=2)}
 
-Candidats :
+Candidat à vérifier :
+{json.dumps(candidat_info, ensure_ascii=False, indent=2)}
 
-{json.dumps(candidats_info, ensure_ascii=False, indent=2)}
+Contrôle l'adéquation réelle du candidat et renvoie l'objet JSON demandé."""
+    last_error: Exception | None = None
+    response = None
+    for attempt in range(3):
+        response = llm.invoke([
+            SystemMessage(content=_VERIFICATEUR_UNITAIRE_SYSTEM),
+            HumanMessage(content=verif_msg),
+        ])
+        try:
+            validation = _parse_validation_json(response.content)
+            break
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            _log.warning(
+                "A5 JSON invalide pour %s tentative %d/3 : %s",
+                cs.get("nom", "?"),
+                attempt + 1,
+                str(exc)[:160],
+            )
+    else:
+        raise ValueError(
+            f"A5 n'a pas produit de JSON valide pour {cs.get('nom', '?')} après 3 tentatives : {last_error}"
+        )
 
-Pour chaque candidat, vérifie :
-1. Les incohérences entre le profil brut et le score attribué
-2. Les dates suspectes (expérience irréaliste, chevauchements)
-3. Les CV gonflés (trop de compétences sans preuves, titres vagues)
-4. Les profils qui ne sont PAS des candidats (offres d'emploi, pages d'entreprise, agrégateurs)
-5. Le niveau attendu : si le profil requis indique alternant/stagiaire/junior, rejette ou baisse fortement les profils clairement confirmés/senior/lead/manager
+    validation.setdefault("candidat_id", cs["candidat_id"])
+    validation.setdefault("nom", cs["nom"])
+    validation.setdefault("score_final", cs["score_global"])
+    validation.setdefault("statut", "douteux")
+    validation.setdefault("remarques", "Vérification A5 sans remarque.")
+    return validation, response
 
-Invalide les profils qui ne sont clairement pas des candidats individuels.
-Marque comme "douteux" ceux avec des incohérences.
-Ajuste le score_final si nécessaire."""
 
-    messages = [
-        SystemMessage(content=VERIFICATEUR_SYSTEM),
-        HumanMessage(content=verif_msg)
-    ]
+def verificateur_node(state: dict) -> dict:
+    """Vérifie UN candidat scoré par A4.
 
-    response = llm.invoke(messages)
-    content = response.content.strip()
+    Ce nœud est appelé en parallèle via Send(), comme A4. Il n'existe pas de
+    Si le LLM ne produit pas un JSON exploitable après retries, le run échoue
+    explicitement.
+    """
+    m = get_metrics()
+    candidat_score = state["candidat_score"]
+    profil_source = state.get("profil_source", {})
+    profil_requis = state.get("profil_competences", {})
+    m.debut(f"A5_{candidat_score['candidat_id']}")
+    _log.info("Vérification A5 de : %s", candidat_score.get("nom", "?"))
 
-    # Extraire le JSON (Mistral ajoute souvent du texte avant/après)
-    try:
-        if "```" in content:
-            content = content.split("```")[1]
-            if content.startswith("json"):
-                content = content[4:]
-        # Chercher un array JSON n'importe où dans la réponse
-        match = re.search(r'\[.*\]', content, re.DOTALL)
-        if match:
-            content = match.group()
-        validations = json.loads(content)
-        if not isinstance(validations, list):
-            validations = [validations]
-    except (json.JSONDecodeError, AttributeError):
-        _log.warning("JSON non parsable depuis le vérificateur — fallback score original.")
-        validations = [
-            {
-                "candidat_id": cs["candidat_id"],
-                "nom": cs["nom"],
-                "score_final": cs["score_global"],
-                "statut": "douteux",
-                "remarques": "Vérification automatique non parsable"
-            }
-            for cs in candidats_scores
-        ]
+    llm = init_chat_model(OLLAMA_MODEL, model_provider=OLLAMA_PROVIDER, temperature=0)
+    validation, response = _verifier_candidat_llm(llm, profil_requis, candidat_score, profil_source)
+    niveau_requis = profil_requis.get(
+        "niveau_experience",
+        profil_requis.get("niveau_seniorite", "indifferent"),
+    )
+    candidat_id = validation.get("candidat_id", candidat_score["candidat_id"])
+    score_final = float(validation.get("score_final", candidat_score["score_global"]))
+    statut = validation.get("statut", "douteux")
+    remarques = validation.get("remarques", "")
+    nom = validation.get("nom", profil_source.get("nom", candidat_score["nom"]))
+    profil_brut = profil_source.get("profil_brut", "")
+    source = profil_source.get("source", "")
+    url = profil_source.get("url", None)
 
-    # Construire les CandidatValide
-    candidats_valides = []
-    profils_par_candidat_id = {
-        p["id"]: p.get("profil_brut", "")
-        for p in state.get("profils_dedupliques", [])
-    }
-    niveau_requis = profil_requis.get("niveau_seniorite", "indifferent")
-    for v in validations:
-        candidat_id = v.get("candidat_id", "")
-        score_final = float(v.get("score_final", 0))
-        statut = v.get("statut", "douteux")
-        remarques = v.get("remarques", "")
-        if niveau_requis in ("alternant", "stagiaire", "junior") and _profil_trop_experimente(
-            profils_par_candidat_id.get(candidat_id, "")
-        ):
+    # Garde-fous déterministes : ils ne remplacent pas A5, ils empêchent A5 de
+    # valider une page non-candidat ou hors compétences malgré un score A4 élevé.
+    if _profil_non_candidat(nom, profil_brut, url or ""):
+        score_final = min(score_final, 20.0)
+        statut = "invalide"
+        remarques = f"{remarques} Page non-candidat détectée.".strip()
+    elif statut == "valide" and not _profil_personne_probable(nom, profil_brut, source, url or ""):
+        score_final = min(score_final, 45.0)
+        statut = "invalide"
+        remarques = f"{remarques} Page ne décrivant pas clairement une personne.".strip()
+    elif statut == "valide":
+        ok, raison = _adequation_minimale(profil_requis, nom, profil_brut)
+        if not ok:
             score_final = min(score_final, 45.0)
-            statut = "douteux" if statut == "valide" else statut
-            remarques = f"{remarques} Niveau trop expérimenté pour un poste {niveau_requis}.".strip()
-        candidats_valides.append(CandidatValide(
-            candidat_id=candidat_id,
-            nom=v.get("nom", ""),
-            score_final=score_final,
-            statut=statut,
-            remarques=remarques
-        ))
+            statut = "invalide"
+            remarques = f"{remarques} {raison}".strip()
 
-    n_valides = sum(1 for c in candidats_valides if c["statut"] == "valide")
-    n_invalides = sum(1 for c in candidats_valides if c["statut"] == "invalide")
-    n_douteux = sum(1 for c in candidats_valides if c["statut"] == "douteux")
-    _log.info("Résultat : %d valides, %d douteux, %d invalides.", n_valides, n_douteux, n_invalides)
-    for c in sorted(candidats_valides, key=lambda x: x["score_final"], reverse=True):
-        _log.info("  %s | %.1f/100 | %s", c['nom'], c['score_final'], c['statut'])
-    m.fin("A5_verificateur", n_entree=len(candidats_scores), n_valides=n_valides, n_douteux=n_douteux, n_invalides=n_invalides)
+    incompatible, raison = _experience_incompatible(profil_brut, niveau_requis)
+    if incompatible:
+        score_final = min(score_final, 45.0)
+        statut = "invalide"
+        remarques = f"{remarques} {raison}".strip()
+
+    candidat_valide = CandidatValide(
+        candidat_id=candidat_id,
+        nom=nom,
+        score_final=score_final,
+        statut=statut,
+        remarques=remarques,
+        source=source,
+        url=url,
+    )
+
+    _log.info("%s -> %.1f/100 | %s", nom, score_final, statut)
+    m.fin(
+        f"A5_{candidat_id}",
+        candidat_nom=nom,
+        score=score_final,
+        statut=statut,
+        source=source,
+    )
 
     return {
-        "candidats_valides": candidats_valides,
-        "messages": [response]
+        "candidats_valides": [candidat_valide],
+        "messages": [response],
     }

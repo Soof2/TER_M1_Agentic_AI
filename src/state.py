@@ -43,6 +43,8 @@ class CandidatValide(TypedDict):
     score_final: float
     statut: str                # "valide", "invalide", "douteux"
     remarques: str
+    source: Optional[str]
+    url: Optional[str]
 
 
 class GraphState(TypedDict):
@@ -57,7 +59,7 @@ class GraphState(TypedDict):
         profils_bruts       → A3c (Filtre)           [reducer: append]
         profils_dedupliques → A6  (Déduplicateur)
         candidats_scores    → A4  (Évaluateur ×N)    [reducer: append]
-        candidats_valides   → A5  (Vérificateur)
+    candidats_valides   → A5  (Vérificateur ×N)     [reducer: append]
         messages_envoyes    → A7  (Recruteur)         [reducer: append]
         rapport_final       → A1  (Orchestrateur)
     """
@@ -82,8 +84,8 @@ class GraphState(TypedDict):
     # A4 écrit (reducer: append — N instances parallèles via Send)
     candidats_scores: Annotated[list[CandidatScore], operator.add]
 
-    # A5 écrit, lu par A1, A7
-    candidats_valides: list[CandidatValide]
+    # A5 écrit (reducer: append — N instances parallèles via Send)
+    candidats_valides: Annotated[list[CandidatValide], operator.add]
 
     # A7 écrit (reducer: append)
     messages_envoyes: Annotated[list[dict], operator.add]
