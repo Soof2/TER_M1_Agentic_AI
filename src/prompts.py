@@ -11,7 +11,7 @@ ANALYSTE_SYSTEM = """Tu es un analyste expert en recrutement. Ta mission est d'a
 - "type_contrat": type de contrat attendu (ex: "alternance", "stage", "CDI", "CDD", "freelance", "indifferent")
 - "formation": niveau de formation attendu (ex: "Bac+5", "Master", "Ingénieur")
 - "contraintes": liste des contraintes (localisation, télétravail, mobilité, habilitation, etc.)
-- "localisations": liste des villes/régions explicitement demandées
+- "localisations": liste des villes/régions/pays géographiques explicitement demandés. ATTENTION : AWS, GCP, Azure, cloud, remote, Docker, Kubernetes ne sont PAS des localisations — ce sont des technologies ou modes de travail.
 - "remote": true si télétravail/hybride est explicitement mentionné, sinon false
 - "mots_cles": liste de mots-clés pertinents pour la recherche de profils
 

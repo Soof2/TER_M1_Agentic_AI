@@ -9,11 +9,10 @@ N instances traitent N profils simultanément.
 import json
 import time
 import random
-from langchain_classic.chat_models import init_chat_model
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from src.state import CandidatScore
-from src.config import OLLAMA_MODEL, OLLAMA_PROVIDER
+from src.config import get_llm
 from src.prompts import EVALUATEUR_SYSTEM
 from src.tools.rag import get_memoire
 from src.observabilite import get_metrics
@@ -57,7 +56,7 @@ def evaluateur_node(state: dict) -> dict:
     except Exception as e:
         log.warning("RAG indisponible : %s", e)
 
-    llm = init_chat_model(OLLAMA_MODEL, model_provider=OLLAMA_PROVIDER, temperature=0)
+    llm = get_llm(temperature=0)
 
     eval_msg = f"""Profil de compétences requis :
 {json.dumps(profil, ensure_ascii=False, indent=2)}

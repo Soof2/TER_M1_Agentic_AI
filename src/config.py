@@ -17,6 +17,13 @@ load_dotenv()
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "kimi-k2.5:cloud")
 OLLAMA_PROVIDER = os.getenv("OLLAMA_PROVIDER", "ollama")
 
+
+def get_llm(temperature: float = 0):
+    """Retourne un LLM avec retry automatique sur rate limit (429)."""
+    from langchain_classic.chat_models import init_chat_model
+    llm = init_chat_model(OLLAMA_MODEL, model_provider=OLLAMA_PROVIDER, temperature=temperature)
+    return llm.with_retry(stop_after_attempt=6, wait_exponential_jitter=True)
+
 # URL du serveur Ollama (utile en Docker où il tourne dans un autre conteneur)
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 

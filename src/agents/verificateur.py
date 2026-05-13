@@ -8,11 +8,10 @@ sous-champs (candidats_scores / candidats_valides) impose cette contrainte.
 
 import json
 import re
-from langchain_classic.chat_models import init_chat_model
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from src.state import GraphState, CandidatValide
-from src.config import OLLAMA_MODEL, OLLAMA_PROVIDER
+from src.config import get_llm
 from src.observabilite import get_metrics
 from src.logger import get_logger
 
@@ -26,16 +25,17 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans texte autour 
 {
   "candidat_id": "...",
   "nom": "...",
-  "score_final": 0,
+  "score_final": <reprends le score_global_A4 fourni, ajuste seulement si tu as une raison forte>,
   "statut": "valide|douteux|invalide",
   "remarques": "..."
 }
 
 Règles strictes :
-- "valide" uniquement si le profil décrit clairement une personne ET montre des compétences liées au poste.
-- "invalide" si c'est une page entreprise, formation, article, annuaire, offre, professeur/cours ou profil hors métier.
+- "valide" uniquement si le profil décrit clairement une personne ET montre des compétences techniques liées au poste.
+- "invalide" si c'est une page entreprise, formation, article, annuaire, offre, professeur/cours, profil hors métier (banquier, immobilier, juriste, retraité, commercial...) ou profil clairement non-technique.
 - "douteux" si c'est une personne possible mais avec preuves insuffisantes ou incohérences.
-- Ne valide pas un profil seulement parce que le score A4 est élevé."""
+- Ne remets JAMAIS score_final à 0 sauf si le profil est complètement hors sujet (score < 20).
+- Garde le score_global_A4 comme base et ajuste de ±20 maximum."""
 
 
 _SKILL_ALIASES = {
@@ -98,6 +98,11 @@ def _adequation_minimale(
     profil_brut: str,
 ) -> tuple[bool, str]:
     """Verrou anti-faux positifs : score LLM élevé ne suffit pas."""
+    # Si le profil_brut est très court, le scraping a échoué (snippet DDG uniquement).
+    # Dans ce cas on ne peut pas prouver l'absence de compétences → on passe.
+    if len((profil_brut or "").strip()) < 400:
+        return True, ""
+
     n_presentes, presentes, absentes = _preuves_competences(profil_requis, nom, profil_brut)
     n_requises = len([s for s in profil_requis.get("hard_skills", []) if s])
     if n_requises == 0:
@@ -277,14 +282,15 @@ def verificateur_node(state: dict) -> dict:
     m.debut(f"A5_{candidat_score['candidat_id']}")
     _log.info("Vérification A5 de : %s", candidat_score.get("nom", "?"))
 
-    llm = init_chat_model(OLLAMA_MODEL, model_provider=OLLAMA_PROVIDER, temperature=0)
+    llm = get_llm(temperature=0)
     validation, response = _verifier_candidat_llm(llm, profil_requis, candidat_score, profil_source)
     niveau_requis = profil_requis.get(
         "niveau_experience",
         profil_requis.get("niveau_seniorite", "indifferent"),
     )
     candidat_id = validation.get("candidat_id", candidat_score["candidat_id"])
-    score_final = float(validation.get("score_final", candidat_score["score_global"]))
+    score_a4 = float(candidat_score["score_global"])
+    score_final = float(validation.get("score_final") or score_a4)
     statut = validation.get("statut", "douteux")
     remarques = validation.get("remarques", "")
     nom = validation.get("nom", profil_source.get("nom", candidat_score["nom"]))
@@ -314,6 +320,29 @@ def verificateur_node(state: dict) -> dict:
         score_final = min(score_final, 45.0)
         statut = "invalide"
         remarques = f"{remarques} {raison}".strip()
+
+    # Upgrade douteux → valide si score >= seuil contact et profil LinkedIn individuel.
+    # LinkedIn bloque le scraping → A5 voit peu de contenu et bascule par défaut sur
+    # "douteux" même pour de bons candidats. Si A4 a scoré >= 75 et que c'est un
+    # vrai profil /in/ avec un titre tech compatible, on fait confiance au score.
+    _TITRES_NON_TECH = (
+        "banquier", "banker", "retraité", "retraite", "immobilier", "notaire",
+        "avocat", "juriste", "commercial", "directeur commercial", "chasseur de têtes",
+        "chasseur de tetes", "managing director", "conseil immobilier",
+        "étudiant en droit", "etudiant en droit",
+    )
+    _titre_non_tech = any(t in nom.lower() for t in _TITRES_NON_TECH)
+    from src.config import SCORE_SEUIL_CONTACT
+    if (
+        statut == "douteux"
+        and score_a4 >= SCORE_SEUIL_CONTACT
+        and url
+        and "/in/" in url.lower()
+        and not _profil_non_candidat(nom, profil_brut, url)
+        and not _titre_non_tech
+    ):
+        statut = "valide"
+        remarques = f"{remarques} Upgrade automatique : score >= {SCORE_SEUIL_CONTACT} sur profil LinkedIn individuel.".strip()
 
     candidat_valide = CandidatValide(
         candidat_id=candidat_id,

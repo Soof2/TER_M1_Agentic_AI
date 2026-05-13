@@ -8,11 +8,10 @@ s'abonnent à ses résultats sans couplage direct.
 
 import json
 import re
-from langchain_classic.chat_models import init_chat_model
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from src.state import GraphState
-from src.config import OLLAMA_MODEL, OLLAMA_PROVIDER
+from src.config import get_llm
 from src.prompts import ANALYSTE_SYSTEM
 from src.observabilite import get_metrics
 from src.logger import get_logger
@@ -83,6 +82,9 @@ def _inferer_localisations(fiche_poste: str) -> list[str]:
     stop = {
         "un", "une", "des", "le", "la", "les", "du", "de", "en", "avec",
         "pour", "poste", "profil", "alternance", "stage", "cdi", "cdd",
+        # Plateformes cloud et techs souvent précédées de "sur"
+        "aws", "gcp", "azure", "cloud", "kubernetes", "docker", "kubernetes",
+        "github", "gitlab", "heroku", "vercel", "netlify",
     }
     for match in pattern.finditer(fiche_poste):
         lieu = re.split(r"[,.;:\n]", match.group(1))[0].strip(" -")
@@ -100,7 +102,7 @@ def analyste_node(state: GraphState) -> dict:
     m = get_metrics()
     m.debut("A2_analyste")
     _log.info("Analyse de la fiche de poste en cours...")
-    llm = init_chat_model(OLLAMA_MODEL, model_provider=OLLAMA_PROVIDER, temperature=0)
+    llm = get_llm(temperature=0)
 
     messages = [
         SystemMessage(content=ANALYSTE_SYSTEM),

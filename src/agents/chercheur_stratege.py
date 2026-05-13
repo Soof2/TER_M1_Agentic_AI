@@ -18,11 +18,10 @@ Output :
 
 import json
 
-from langchain_classic.chat_models import init_chat_model
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from src.state import GraphState
-from src.config import OLLAMA_MODEL, OLLAMA_PROVIDER
+from src.config import get_llm
 from src.observabilite import get_metrics
 from src.logger import get_logger
 
@@ -231,7 +230,7 @@ def stratege_node(state: GraphState) -> dict:
         ", ".join(profil.get("hard_skills", [])[:5]),
     )
 
-    llm = init_chat_model(OLLAMA_MODEL, model_provider=OLLAMA_PROVIDER, temperature=0)
+    llm = get_llm(temperature=0)
 
     recherche_msg = (
         f"Hard skills : {', '.join(profil.get('hard_skills', []))}\n"

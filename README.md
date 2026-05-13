@@ -1,7 +1,28 @@
 # SMA de Recrutement Automatisé — Agentic AI
 
-Système multi-agents de recrutement basé sur **LangGraph** et **LLM (Ollama)**.  
+Système multi-agents de recrutement basé sur **LangGraph** et **LLM (Groq)**.  
 Prototype développé dans le cadre du TER M1 — *Étude des architectures des logiciels basés sur l'IA et de l'Agentic AI*.
+
+---
+
+## Nouveautés (mai 2026)
+
+### Migration LLM : Ollama → Groq
+Le projet utilise désormais **Groq** comme provider LLM (`llama-3.3-70b-versatile`, free tier, sans CB). Ollama local causait des crashes sur Mac. La config s'adapte via `GROQ_API_KEY` dans `.env`. En cas de dépassement du quota journalier (100k tokens/jour, 12k TPM), basculer sur `llama-3.1-8b-instant`.
+
+### Architecture microservices
+En complément du mode monolithique LangGraph, une architecture microservices est disponible dans `services/` : 6 services indépendants (analyste, chercheur, évaluateur, vérificateur, recruteur, orchestrateur HTTP) orchestrés par `docker-compose.microservices.yml`. Le mode local `./run_local.sh` reste la référence pour le développement.
+
+```bash
+# Mode microservices Docker
+docker compose -f docker-compose.microservices.yml up --build
+```
+
+### Fixes qualité du pipeline
+- **A2** — bug de localisation corrigé (`"AWS ou GCP"` n'est plus parsé comme une ville)
+- **A3b** — délai 1.5s entre appels DDG pour éviter le rate-limiting
+- **A3c** — filtre `bing.com/aclick` et détection de profils agrégés multi-LinkedIn
+- **A5** — correction du score toujours à 0 (template JSON mal initialisé), upgrade automatique douteux→valide si score ≥ 75 et profil LinkedIn `/in/`
 
 ---
 
@@ -90,14 +111,14 @@ Interface : `http://localhost:8080`
 | Composant | Technologie |
 |---|---|
 | Orchestration agents | LangGraph |
-| LLM | Ollama (kimi-k2.5:cloud, mistral, phi…) |
+| LLM | Groq (`llama-3.3-70b-versatile`, free tier) |
 | Recherche web | DuckDuckGo (ddgs) |
 | Recherche GitHub | GitHub Search Users API (gratuit) |
 | Recherche Stack Overflow | Stack Exchange API (gratuit) |
 | Mémoire vectorielle | ChromaDB + SentenceTransformers |
 | API REST | FastAPI + Uvicorn |
 | Interface graphique | NiceGUI |
-| Conteneurisation | Docker + docker-compose |
+| Conteneurisation | Docker + docker-compose (monolithique) + docker-compose.microservices.yml |
 
 ---
 
@@ -105,15 +126,7 @@ Interface : `http://localhost:8080`
 
 ### Prérequis
 - Python 3.11+
-- [Ollama](https://ollama.com) installé
-- Un modèle Ollama disponible localement ou accessible via Ollama Cloud
-
-```bash
-ollama pull mistral
-# ou un autre modèle compatible :
-# ollama pull llama3.1
-# ollama pull qwen2.5
-```
+- Une clé API [Groq](https://console.groq.com) (gratuit, sans CB)
 
 ### Setup
 
@@ -126,6 +139,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 cp .env.example .env
+# Renseigner GROQ_API_KEY=gsk_... dans .env
 ```
 
 ---

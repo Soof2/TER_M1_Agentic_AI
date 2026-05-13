@@ -7,11 +7,10 @@ Réactivité événementielle.
 """
 
 import json
-from langchain_classic.chat_models import init_chat_model
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from src.state import GraphState
-from src.config import OLLAMA_MODEL, OLLAMA_PROVIDER, SCORE_SEUIL_CONTACT, SCORE_SEUIL_VIABLE, TOP_N_RELATIF
+from src.config import get_llm, SCORE_SEUIL_CONTACT, SCORE_SEUIL_VIABLE, TOP_N_RELATIF
 from src.prompts import RECRUTEUR_SYSTEM
 from src.observabilite import get_metrics
 from src.logger import get_logger
@@ -61,7 +60,7 @@ def recruteur_node(state: GraphState) -> dict:  # noqa: C901
         _log.warning("Aucun candidat à contacter.")
         return {"messages_envoyes": []}
 
-    llm = init_chat_model(OLLAMA_MODEL, model_provider=OLLAMA_PROVIDER, temperature=0.7)
+    llm = get_llm(temperature=0.7)
 
     candidats_info = json.dumps([
         {"candidat_id": c["candidat_id"], "nom": c["nom"],

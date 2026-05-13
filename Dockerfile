@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copier le code source
 COPY src/ ./src/
+COPY services/ ./services/
 
 # Répertoires pour métriques et persistance RAG
 RUN mkdir -p logs data/chromadb

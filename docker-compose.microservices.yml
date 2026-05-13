@@ -1,0 +1,126 @@
+services:
+
+  # ── A2 Analyste ──────────────────────────────────────────────────────────────
+  svc-analyste:
+    build:
+      context: .
+      dockerfile: Dockerfile.microservices
+    command: uvicorn services.analyste.main:app --host 0.0.0.0 --port 8001
+    env_file: .env
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./services:/app/services
+    restart: unless-stopped
+
+  # ── A3 Chercheur (Stratège + Collecteur + Filtre) ────────────────────────────
+  svc-chercheur:
+    build:
+      context: .
+      dockerfile: Dockerfile.microservices
+    command: uvicorn services.chercheur.main:app --host 0.0.0.0 --port 8002
+    env_file: .env
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./services:/app/services
+    restart: unless-stopped
+
+  # ── A4 Évaluateur ────────────────────────────────────────────────────────────
+  svc-evaluateur:
+    build:
+      context: .
+      dockerfile: Dockerfile.microservices
+    command: uvicorn services.evaluateur.main:app --host 0.0.0.0 --port 8003
+    env_file: .env
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./services:/app/services
+    restart: unless-stopped
+
+  # ── A5 Vérificateur ──────────────────────────────────────────────────────────
+  svc-verificateur:
+    build:
+      context: .
+      dockerfile: Dockerfile.microservices
+    command: uvicorn services.verificateur.main:app --host 0.0.0.0 --port 8004
+    env_file: .env
+    ports:
+      - "8004:8004"
+    volumes:
+      - ./services:/app/services
+    restart: unless-stopped
+
+  # ── A7 Recruteur ─────────────────────────────────────────────────────────────
+  svc-recruteur:
+    build:
+      context: .
+      dockerfile: Dockerfile.microservices
+    command: uvicorn services.recruteur.main:app --host 0.0.0.0 --port 8005
+    env_file: .env
+    ports:
+      - "8005:8005"
+    volumes:
+      - ./services:/app/services
+    restart: unless-stopped
+
+  # ── Orchestrateur (remplace LangGraph) ───────────────────────────────────────
+  svc-orchestrateur:
+    build:
+      context: .
+      dockerfile: Dockerfile.microservices
+    command: uvicorn services.orchestrateur.main:app --host 0.0.0.0 --port 8006
+    env_file: .env
+    environment:
+      - SVC_ANALYSTE=http://svc-analyste:8001
+      - SVC_CHERCHEUR=http://svc-chercheur:8002
+      - SVC_EVALUATEUR=http://svc-evaluateur:8003
+      - SVC_VERIFICATEUR=http://svc-verificateur:8004
+      - SVC_RECRUTEUR=http://svc-recruteur:8005
+    depends_on:
+      - svc-analyste
+      - svc-chercheur
+      - svc-evaluateur
+      - svc-verificateur
+      - svc-recruteur
+    ports:
+      - "8006:8006"
+    volumes:
+      - ./services:/app/services
+    restart: unless-stopped
+
+  # ── API Gateway (point d'entrée public) ──────────────────────────────────────
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.microservices
+    command: uvicorn src.api:app --host 0.0.0.0 --port 8000
+    env_file: .env
+    environment:
+      - SVC_ORCHESTRATEUR=http://svc-orchestrateur:8006
+    depends_on:
+      - svc-orchestrateur
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./services:/app/services
+    restart: unless-stopped
+
+  # ── UI NiceGUI ────────────────────────────────────────────────────────────────
+  sma-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.microservices
+    command: python -m src.ui.app
+    environment:
+      - API_URL=http://api-gateway:8000
+      - UI_HOST=0.0.0.0
+      - UI_PORT=8080
+    depends_on:
+      - api-gateway
+    ports:
+      - "8080:8080"
+    restart: unless-stopped

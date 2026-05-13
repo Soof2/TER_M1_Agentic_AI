@@ -159,6 +159,9 @@ _NOISE_DOMAINS = (
     "humancoders.com",
     "aquilapp.fr",
     "superprof.fr",
+    # Liens publicitaires Bing
+    "bing.com/aclick",
+    "bing.com/maps",
 )
 
 # Fragments de chemin URL qui trahissent une page d'offre (indépendamment du domaine)
@@ -176,6 +179,26 @@ _NOISE_URL_PATHS = (
     "/senior-python-developer-",  # pattern titre de poste dans URL
     "/python-developer-jobs",
 )
+
+
+def _is_aggregated_profile(title: str, profil_brut: str) -> bool:
+    """Détecte les pages qui agrègent plusieurs profils (résultats de recherche LinkedIn)."""
+    texte = f"{title} {profil_brut}"
+    # Plusieurs URLs /in/ dans le contenu = page de résultats
+    if texte.lower().count("linkedin.com/in/") >= 3:
+        return True
+    # Titre DDG avec plusieurs personnes : "Nom1 - Titre | LinkedInNom2 - Titre"
+    # Le mot "linkedin" apparaît plusieurs fois dans le titre (en minuscules ou majuscules)
+    if title.lower().count("linkedin") >= 2:
+        return True
+    # Plusieurs " - LinkedIn" ou "| LinkedIn" dans le titre
+    if title.count(" - LinkedIn") >= 2 or title.count("| LinkedIn") >= 2:
+        return True
+    # Titre avec plusieurs tirets séparateurs typiques des noms LinkedIn concaténés
+    # Ex: "Nom1 - Titre1 ...Nom2 - Titre2 ...Nom3"
+    if title.count(" ... ") >= 2 and title.lower().count("linkedin") >= 1:
+        return True
+    return False
 
 
 def _is_noise_url(url: str) -> bool:
@@ -252,8 +275,8 @@ def filtre_node(state: GraphState) -> dict:
         else:
             profil_brut = scraped
 
-        # Post-filtre : le contenu complet peut révéler une offre
-        if _is_noise_text(profil_brut):
+        # Post-filtre : le contenu complet peut révéler une offre ou un agrégat
+        if _is_noise_text(profil_brut) or _is_aggregated_profile(h.get("title", ""), profil_brut):
             n_post_drop += 1
             continue
 
