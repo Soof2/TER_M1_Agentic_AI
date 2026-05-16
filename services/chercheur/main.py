@@ -32,6 +32,10 @@ def chercher(body: ProfilCompetences):
         state.update(collecteur_node(state))
         # A3c — Filtre
         state.update(filtre_node(state))
-        return {"profils_bruts": state.get("profils_bruts", [])}
+        return {
+            "profils_bruts": state.get("profils_bruts", []),
+            "requetes_recherche": state.get("requetes_recherche", {}),
+            "resultats_bruts_count": len(state.get("resultats_bruts", [])),
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

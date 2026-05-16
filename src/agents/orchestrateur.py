@@ -103,12 +103,38 @@ def _table_candidats(candidats: list[dict], profils_par_id: dict[str, dict]) -> 
     return "\n".join(lignes)
 
 
+def _section_requetes(requetes: dict) -> str:
+    """Formate les requêtes A3a pour audit dans le rapport final."""
+    if not requetes:
+        return "Aucune requête enregistrée."
+
+    labels = {
+        "queries_generales": "Web général / CV / portfolios",
+        "queries_linkedin": "LinkedIn",
+        "queries_github": "GitHub Users API",
+        "queries_cv_sites": "Sites CV / freelances",
+        "tags_stackoverflow": "Tags Stack Overflow",
+    }
+    lignes = [
+        _ligne_table(["Source", "N°", "Requête"]),
+        _ligne_table(["---", "---:", "---"]),
+    ]
+    for key, label in labels.items():
+        valeurs = requetes.get(key, [])
+        if not valeurs:
+            continue
+        for index, valeur in enumerate(valeurs, 1):
+            lignes.append(_ligne_table([label, str(index), f"`{valeur}`"]))
+    return "\n".join(lignes) if len(lignes) > 2 else "Aucune requête enregistrée."
+
+
 def rapport_node(state: GraphState) -> dict:
     """Produit le rapport final en agrégeant les résultats de tous les agents."""
     _log.info("Génération du rapport final...")
 
     profil = state.get("profil_competences", {})
     n_bruts = len(state.get("profils_bruts", []))
+    n_hits_bruts = len(state.get("resultats_bruts", []))
     n_dedup = len(state.get("profils_dedupliques", []))
     candidats_verifies = state.get("candidats_valides", [])
     candidats_valides = [c for c in candidats_verifies if c.get("statut") == "valide"]
@@ -116,6 +142,7 @@ def rapport_node(state: GraphState) -> dict:
     candidats_invalides = [c for c in candidats_verifies if c.get("statut") == "invalide"]
     messages_envoyes = state.get("messages_envoyes", [])
     profils_par_id = {p.get("id"): p for p in state.get("profils_dedupliques", [])}
+    requetes_section = _section_requetes(state.get("requetes_recherche", {}))
 
     # Exporter les métriques d'observabilité
     m = get_metrics()
@@ -129,7 +156,7 @@ def rapport_node(state: GraphState) -> dict:
         n_invalides=len(candidats_invalides),
         n_messages=len(messages_envoyes),
     )
-    metriques_resume = m.resume_texte()
+    metriques_resume = f"```text\n{m.resume_texte()}\n```"
 
     messages_section = "Aucun message généré."
     if messages_envoyes:
@@ -151,6 +178,7 @@ def rapport_node(state: GraphState) -> dict:
 - Contraintes : {_valeur(profil.get('contraintes'))}
 
 ## Statistiques de recherche
+- Résultats bruts collectés : {n_hits_bruts}
 - Profils trouvés : {n_bruts}
 - Profils après déduplication : {n_dedup}
 - Candidats évalués : {len(state.get('candidats_scores', []))}
@@ -158,6 +186,9 @@ def rapport_node(state: GraphState) -> dict:
 - Candidats douteux : {len(candidats_douteux)}
 - Profils invalides / non-candidats : {len(candidats_invalides)}
 - Messages générés : {len(messages_envoyes)}
+
+## Recherches effectuées
+{requetes_section}
 
 ## Candidats valides à contacter
 {_table_candidats(candidats_valides, profils_par_id)}

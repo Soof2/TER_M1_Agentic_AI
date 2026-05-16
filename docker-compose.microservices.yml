@@ -7,10 +7,14 @@ services:
       dockerfile: Dockerfile.microservices
     command: uvicorn services.analyste.main:app --host 0.0.0.0 --port 8001
     env_file: .env
+    environment:
+      - LLM_PROVIDER=groq
     ports:
       - "8001:8001"
     volumes:
       - ./services:/app/services
+      - ./logs:/app/logs
+      - ./data:/app/data
     restart: unless-stopped
 
   # ── A3 Chercheur (Stratège + Collecteur + Filtre) ────────────────────────────
@@ -20,10 +24,14 @@ services:
       dockerfile: Dockerfile.microservices
     command: uvicorn services.chercheur.main:app --host 0.0.0.0 --port 8002
     env_file: .env
+    environment:
+      - LLM_PROVIDER=groq
     ports:
       - "8002:8002"
     volumes:
       - ./services:/app/services
+      - ./logs:/app/logs
+      - ./data:/app/data
     restart: unless-stopped
 
   # ── A4 Évaluateur ────────────────────────────────────────────────────────────
@@ -33,10 +41,14 @@ services:
       dockerfile: Dockerfile.microservices
     command: uvicorn services.evaluateur.main:app --host 0.0.0.0 --port 8003
     env_file: .env
+    environment:
+      - LLM_PROVIDER=groq
     ports:
       - "8003:8003"
     volumes:
       - ./services:/app/services
+      - ./logs:/app/logs
+      - ./data:/app/data
     restart: unless-stopped
 
   # ── A5 Vérificateur ──────────────────────────────────────────────────────────
@@ -46,10 +58,14 @@ services:
       dockerfile: Dockerfile.microservices
     command: uvicorn services.verificateur.main:app --host 0.0.0.0 --port 8004
     env_file: .env
+    environment:
+      - LLM_PROVIDER=groq
     ports:
       - "8004:8004"
     volumes:
       - ./services:/app/services
+      - ./logs:/app/logs
+      - ./data:/app/data
     restart: unless-stopped
 
   # ── A7 Recruteur ─────────────────────────────────────────────────────────────
@@ -59,10 +75,14 @@ services:
       dockerfile: Dockerfile.microservices
     command: uvicorn services.recruteur.main:app --host 0.0.0.0 --port 8005
     env_file: .env
+    environment:
+      - LLM_PROVIDER=groq
     ports:
       - "8005:8005"
     volumes:
       - ./services:/app/services
+      - ./logs:/app/logs
+      - ./data:/app/data
     restart: unless-stopped
 
   # ── Orchestrateur (remplace LangGraph) ───────────────────────────────────────
@@ -73,6 +93,7 @@ services:
     command: uvicorn services.orchestrateur.main:app --host 0.0.0.0 --port 8006
     env_file: .env
     environment:
+      - LLM_PROVIDER=groq
       - SVC_ANALYSTE=http://svc-analyste:8001
       - SVC_CHERCHEUR=http://svc-chercheur:8002
       - SVC_EVALUATEUR=http://svc-evaluateur:8003
@@ -88,6 +109,8 @@ services:
       - "8006:8006"
     volumes:
       - ./services:/app/services
+      - ./logs:/app/logs
+      - ./data:/app/data
     restart: unless-stopped
 
   # ── API Gateway (point d'entrée public) ──────────────────────────────────────
@@ -98,6 +121,7 @@ services:
     command: uvicorn src.api:app --host 0.0.0.0 --port 8000
     env_file: .env
     environment:
+      - LLM_PROVIDER=groq
       - SVC_ORCHESTRATEUR=http://svc-orchestrateur:8006
     depends_on:
       - svc-orchestrateur

@@ -5,6 +5,7 @@ Coordonne le pipeline complet via appels HTTP aux autres microservices :
   A2 → A3 → A6 (dedup inline) → A4×N (parallèle) → A5×N (parallèle) → A7 ou rapport
 """
 import asyncio
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
@@ -12,8 +13,11 @@ from datetime import datetime, timezone
 import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from src.agents.deduplicateur import deduplicateur_node
+from src.agents.persistance import persistance_node
 
 app = FastAPI(title="Orchestrateur", version="1.0")
+log = logging.getLogger("svc-orchestrateur")
 
 # URLs des microservices (configurables via env)
 SVC_ANALYSTE    = os.getenv("SVC_ANALYSTE",    "http://svc-analyste:8001")
@@ -33,17 +37,6 @@ class PipelineRequest(BaseModel):
     run_id: str = ""
 
 
-def _dedupliquer(profils: list) -> list:
-    seen, out = set(), []
-    for p in profils:
-        url = (p.get("url") or "").strip().lower()
-        key = url or p.get("nom", "")
-        if key and key not in seen:
-            seen.add(key)
-            out.append(p)
-    return out
-
-
 async def _evaluer_un(client: httpx.AsyncClient, candidat: dict, profil_competences: dict, fiche_poste: str) -> dict | None:
     try:
         r = await client.post(
@@ -54,7 +47,8 @@ async def _evaluer_un(client: httpx.AsyncClient, candidat: dict, profil_competen
         r.raise_for_status()
         return r.json().get("candidat_score")
     except Exception as e:
-        return None
+        log.exception("Erreur A4 évaluateur pour %s", candidat.get("nom", "?"))
+        return {"_error": str(e), "_stage": "evaluateur", "candidat_id": candidat.get("id")}
 
 
 async def _verifier_un(client: httpx.AsyncClient, score: dict, profil_source: dict, profil_competences: dict) -> dict | None:
@@ -71,7 +65,8 @@ async def _verifier_un(client: httpx.AsyncClient, score: dict, profil_source: di
         r.raise_for_status()
         return r.json().get("candidat_valide")
     except Exception as e:
-        return None
+        log.exception("Erreur A5 vérificateur pour %s", score.get("nom", "?"))
+        return {"_error": str(e), "_stage": "verificateur", "candidat_id": score.get("candidat_id")}
 
 
 @app.get("/health")
@@ -106,18 +101,22 @@ async def pipeline(body: PipelineRequest):
                 timeout=TIMEOUT,
             )
             r.raise_for_status()
-            profils_bruts = r.json().get("profils_bruts", [])
+            chercheur_payload = r.json()
+            profils_bruts = chercheur_payload.get("profils_bruts", [])
+            requetes_recherche = chercheur_payload.get("requetes_recherche", {})
+            resultats_bruts_count = chercheur_payload.get("resultats_bruts_count", 0)
         except Exception as e:
             raise HTTPException(502, f"A3 Chercheur error: {e}")
 
-        # --- A6 : Déduplication (inline) ---
-        profils = _dedupliquer(profils_bruts)
+        # --- A6 : Déduplication ---
+        profils = deduplicateur_node({"profils_bruts": profils_bruts}).get("profils_dedupliques", [])
 
         # --- A4 : Évaluateurs en parallèle ---
         scores_raw = await asyncio.gather(*[
             _evaluer_un(client, p, profil_competences, body.fiche_poste) for p in profils
         ])
-        candidats_scores = [s for s in scores_raw if s]
+        erreurs = [s for s in scores_raw if s and s.get("_error")]
+        candidats_scores = [s for s in scores_raw if s and not s.get("_error")]
 
         # Construire index profil_source pour A5
         profil_index = {p["id"]: p for p in profils}
@@ -127,7 +126,8 @@ async def pipeline(body: PipelineRequest):
             _verifier_un(client, s, profil_index.get(s.get("candidat_id"), {}), profil_competences)
             for s in candidats_scores
         ])
-        candidats_valides = [v for v in valides_raw if v]
+        erreurs.extend(v for v in valides_raw if v and v.get("_error"))
+        candidats_valides = [v for v in valides_raw if v and not v.get("_error")]
 
         # --- Routage ---
         valides = [c for c in candidats_valides if c.get("statut") == "valide"]
@@ -149,36 +149,29 @@ async def pipeline(body: PipelineRequest):
                 )
                 r.raise_for_status()
                 messages_envoyes = r.json().get("messages_envoyes", [])
-            except Exception:
-                pass
-        elif not valides:
-            # Mode relatif : top-N parmi les viables
-            viables = sorted(
-                [c for c in douteux if c.get("score_final", 0) >= SCORE_SEUIL_VIABLE],
-                key=lambda x: x.get("score_final", 0),
-                reverse=True,
-            )[:TOP_N_RELATIF]
-            if viables:
-                try:
-                    r = await client.post(
-                        f"{SVC_RECRUTEUR}/recruter",
-                        json={
-                            "candidats_valides": viables,
-                            "fiche_poste": body.fiche_poste,
-                            "profil_competences": profil_competences,
-                        },
-                        timeout=TIMEOUT,
-                    )
-                    r.raise_for_status()
-                    messages_envoyes = r.json().get("messages_envoyes", [])
-                except Exception:
-                    pass
+            except Exception as exc:  # noqa: BLE001
+                log.exception("Erreur A7 recruteur")
+                erreurs.append({"_stage": "recruteur", "_error": str(exc)})
+
+        # --- A8 : Persistance RAG ---
+        try:
+            persistance_node({
+                "fiche_poste": body.fiche_poste,
+                "profils_dedupliques": profils,
+                "candidats_valides": candidats_valides,
+            })
+        except Exception as exc:  # noqa: BLE001
+            log.exception("Erreur A8 persistance")
+            erreurs.append({"_stage": "persistance", "_error": str(exc)})
 
     return {
         "run_id": run_id,
+        "mode_execution": "microservices",
         "ts_debut": ts_debut,
         "ts_fin": datetime.now(timezone.utc).isoformat(),
         "profil_competences": profil_competences,
+        "requetes_recherche": requetes_recherche,
+        "resultats_bruts_count": resultats_bruts_count,
         "profils_trouves": len(profils_bruts),
         "profils_deduplication": len(profils),
         "candidats_scores": candidats_scores,
@@ -186,4 +179,5 @@ async def pipeline(body: PipelineRequest):
         "candidats_douteux": douteux,
         "candidats_invalides": invalides,
         "messages_envoyes": messages_envoyes,
+        "erreurs_partielles": erreurs,
     }

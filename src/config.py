@@ -14,18 +14,28 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 # Modèle LLM
 # ---------------------------------------------------------------------------
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "kimi-k2.5:cloud")
-OLLAMA_PROVIDER = os.getenv("OLLAMA_PROVIDER", "ollama")
+# Groq est le provider par défaut pour que le projet soit portable via Docker :
+# aucune dépendance à un serveur LLM local, seulement GROQ_API_KEY dans .env.
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq")
+if "LLM_MODEL" in os.environ:
+    LLM_MODEL = os.environ["LLM_MODEL"]
+elif LLM_PROVIDER == "groq":
+    LLM_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+else:
+    LLM_MODEL = "mistral"
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 
 def get_llm(temperature: float = 0):
     """Retourne un LLM avec retry automatique sur rate limit (429)."""
+    if LLM_PROVIDER == "groq" and not GROQ_API_KEY:
+        raise RuntimeError(
+            "GROQ_API_KEY est requis pour utiliser Groq. "
+            "Copiez .env.example vers .env puis renseignez GROQ_API_KEY."
+        )
     from langchain_classic.chat_models import init_chat_model
-    llm = init_chat_model(OLLAMA_MODEL, model_provider=OLLAMA_PROVIDER, temperature=temperature)
+    llm = init_chat_model(LLM_MODEL, model_provider=LLM_PROVIDER, temperature=temperature)
     return llm.with_retry(stop_after_attempt=6, wait_exponential_jitter=True)
-
-# URL du serveur Ollama (utile en Docker où il tourne dans un autre conteneur)
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 
 # ---------------------------------------------------------------------------
 # APIs externes

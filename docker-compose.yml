@@ -1,41 +1,20 @@
 services:
-
-  # Serveur LLM (Ollama)
-  ollama:
-    image: ollama/ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      # Monte ~/.ollama du host → credentials + modèles déjà téléchargés
-      - ~/.ollama:/root/.ollama
-    restart: unless-stopped
-    # Pour GPU NVIDIA : décommenter les lignes suivantes
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
-
-  # SMA de recrutement — API REST (FastAPI + Uvicorn)
+  # Mode monolithique : API REST + LangGraph dans un seul runtime Python.
   sma-api:
     build: .
     command: uvicorn src.api:app --host 0.0.0.0 --port 8000 --workers 1
-    depends_on:
-      - ollama
     env_file:
-      - .env          # fichier local (non versionné), voir .env.example
+      - .env
     environment:
-      - OLLAMA_HOST=http://ollama:11434
+      - LLM_PROVIDER=groq
     ports:
-      - "${API_PORT:-8000}:8000"   # API Gateway accessible sur http://localhost:${API_PORT:-8000}
+      - "${API_PORT:-8000}:8000"
     volumes:
-      - ./logs:/app/logs     # export des métriques d'observabilité
-      - ./data:/app/data     # persistance ChromaDB (mémoire RAG)
+      - ./logs:/app/logs
+      - ./data:/app/data
     restart: unless-stopped
 
-  # Interface graphique — NiceGUI
+  # Interface graphique — NiceGUI.
   sma-ui:
     build: .
     command: python -m src.ui.app
@@ -46,24 +25,20 @@ services:
       - UI_HOST=0.0.0.0
       - UI_PORT=8080
     ports:
-      - "${UI_PORT_HOST:-8080}:8080"   # UI accessible sur http://localhost:${UI_PORT_HOST:-8080}
+      - "${UI_PORT_HOST:-8080}:8080"
     restart: unless-stopped
 
-  # SMA de recrutement — mode CLI interactif (optionnel)
+  # Mode CLI interactif monolithique (optionnel).
   sma-cli:
     build: .
     profiles:
-      - cli             # démarrer uniquement avec : docker compose --profile cli run sma-cli
-    depends_on:
-      - ollama
+      - cli
     env_file:
       - .env
     environment:
-      - OLLAMA_HOST=http://ollama:11434
+      - LLM_PROVIDER=groq
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data
     stdin_open: true
     tty: true
-
-# Plus besoin du volume nommé : on monte directement ~/.ollama du host

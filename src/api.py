@@ -13,9 +13,12 @@ Expose le SMA de recrutement comme un service HTTP REST :
     GET  /health                → vérification de disponibilité
 
 Chaque run est identifié par un UUID. Les résultats et la file d'événements
-sont conservés en mémoire pendant la durée de vie du processus (suffisant
-pour le prototype). Le pipeline tourne dans un thread séparé pour ne pas
-bloquer la boucle asyncio de FastAPI.
+sont conservés en mémoire et persistés dans SQLite. Le pipeline tourne dans
+un thread séparé pour ne pas bloquer la boucle asyncio de FastAPI.
+
+Deux runtimes sont supportés :
+    - défaut : LangGraph monolithique (`src.graph`)
+    - microservices : orchestrateur HTTP si `SVC_ORCHESTRATEUR` est défini
 """
 
 import asyncio
@@ -29,6 +32,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+import httpx
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -43,8 +47,10 @@ from src.observabilite import reset_metrics, get_metrics
 app = FastAPI(
     title="SMA Recrutement — API Gateway",
     description=(
-        "API REST exposant le système multi-agents de recrutement (LangGraph). "
-        "Supporte le streaming SSE et le human-in-the-loop."
+        "API REST exposant le système multi-agents de recrutement. "
+        "Le runtime est LangGraph par défaut, ou microservices HTTP si "
+        "SVC_ORCHESTRATEUR est défini. Supporte le streaming SSE et le "
+        "human-in-the-loop en mode LangGraph."
     ),
     version="1.1.0",
 )
@@ -64,6 +70,7 @@ _CHROMA_DIR = Path("data/chromadb")
 _RUNS_DB_PATH = Path(os.getenv("RUNS_DB_PATH", "data/runs.sqlite"))
 _METRICS_HISTORY_LIMIT = 20
 _DB_LOCK = threading.Lock()
+_SVC_ORCHESTRATEUR = os.getenv("SVC_ORCHESTRATEUR", "").rstrip("/")
 
 
 # ---------------------------------------------------------------------------
@@ -364,6 +371,192 @@ def _run_pipeline(run_id: str, fiche_poste: str, with_interrupt: bool) -> None:
         _close_event_stream(run_id)
 
 
+def _rapport_microservices(fiche_poste: str, payload: dict) -> str:
+    """Construit un rapport Markdown court depuis la réponse de l'orchestrateur HTTP."""
+    valides = payload.get("candidats_valides", [])
+    douteux = payload.get("candidats_douteux", [])
+    invalides = payload.get("candidats_invalides", [])
+    messages = payload.get("messages_envoyes", [])
+    requetes = payload.get("requetes_recherche", {})
+
+    def table(candidats: list[dict]) -> str:
+        if not candidats:
+            return "Aucun."
+        rows = [
+            "| Nom | Score | Statut | Source | Remarques |",
+            "| --- | ---: | --- | --- | --- |",
+        ]
+        for c in sorted(candidats, key=lambda x: x.get("score_final", 0), reverse=True):
+            rows.append(
+                "| "
+                + " | ".join([
+                    str(c.get("nom", "?")).replace("|", "/"),
+                    f"{float(c.get('score_final', 0)):.1f}",
+                    str(c.get("statut", "")).replace("|", "/"),
+                    str(c.get("source", "")).replace("|", "/"),
+                    str(c.get("remarques", "")).replace("\n", " ").replace("|", "/"),
+                ])
+                + " |"
+            )
+        return "\n".join(rows)
+
+    messages_section = "Aucun message généré."
+    if messages:
+        messages_section = "\n".join(
+            f"- {m.get('nom', 'Candidat')} ({m.get('canal', 'canal non précisé')}) : {m.get('objet', 'Sans objet')}"
+            for m in messages
+        )
+
+    labels = {
+        "queries_generales": "Web général / CV / portfolios",
+        "queries_linkedin": "LinkedIn",
+        "queries_github": "GitHub Users API",
+        "queries_cv_sites": "Sites CV / freelances",
+        "tags_stackoverflow": "Tags Stack Overflow",
+    }
+    recherches_lignes = [
+        "| Source | N° | Requête |",
+        "| --- | ---: | --- |",
+    ]
+    for key, label in labels.items():
+        valeurs = requetes.get(key, []) if isinstance(requetes, dict) else []
+        for index, valeur in enumerate(valeurs, 1):
+            safe_valeur = str(valeur).replace("|", "/")
+            recherches_lignes.append(f"| {label} | {index} | `{safe_valeur}` |")
+    recherches_section = (
+        "\n".join(recherches_lignes)
+        if len(recherches_lignes) > 2
+        else "Aucune requête enregistrée."
+    )
+
+    return f"""# Rapport final de recrutement
+
+## Mode d'exécution
+- Architecture : microservices HTTP
+- Orchestrateur : service `svc-orchestrateur`
+
+## Résumé du poste
+- Fiche de poste : {fiche_poste}
+
+## Statistiques de recherche
+- Résultats bruts collectés : {payload.get('resultats_bruts_count', 0)}
+- Profils trouvés : {payload.get('profils_trouves', 0)}
+- Profils après déduplication : {payload.get('profils_deduplication', 0)}
+- Candidats évalués : {len(payload.get('candidats_scores', []))}
+- Candidats valides : {len(valides)}
+- Candidats douteux : {len(douteux)}
+- Profils invalides / non-candidats : {len(invalides)}
+- Messages générés : {len(messages)}
+
+## Recherches effectuées
+{recherches_section}
+
+## Candidats valides à contacter
+{table(valides)}
+
+## Candidats douteux à vérifier manuellement
+{table(douteux)}
+
+## Profils invalides ou non-candidats
+{table(invalides)}
+
+## Messages générés
+{messages_section}
+"""
+
+
+def _run_pipeline_microservices(run_id: str, fiche_poste: str, with_interrupt: bool) -> None:
+    """Exécute le pipeline distribué via le microservice orchestrateur HTTP."""
+    from src.logger import get_logger
+
+    log = get_logger("api.microservices")
+    try:
+        if with_interrupt:
+            log.warning(
+                "Run %s : HITL demandé mais non supporté en mode microservices, "
+                "exécution sans interruption.",
+                run_id,
+            )
+
+        _runs[run_id]["status"] = "running"
+        _runs[run_id]["mode_execution"] = "microservices"
+        _save_run(run_id)
+        _push_event(run_id, "run_started", {
+            "fiche_poste": fiche_poste[:200],
+            "mode_execution": "microservices",
+        })
+
+        with httpx.Client(timeout=httpx.Timeout(300.0, read=300.0)) as client:
+            response = client.post(
+                f"{_SVC_ORCHESTRATEUR}/pipeline",
+                json={"run_id": run_id, "fiche_poste": fiche_poste},
+            )
+            response.raise_for_status()
+            payload = response.json()
+
+        for node in (
+            "analyste",
+            "chercheur_stratege",
+            "chercheur_collecteur",
+            "chercheur_filtre",
+            "deduplicateur",
+            "evaluateur",
+            "verificateur",
+            "recruteur",
+            "rapport",
+        ):
+            _push_event(run_id, "node_completed", {
+                "node": node,
+                "summary": {"mode": "microservices"},
+            })
+
+        candidats = (
+            payload.get("candidats_valides", [])
+            + payload.get("candidats_douteux", [])
+            + payload.get("candidats_invalides", [])
+        )
+        rapport = payload.get("rapport") or _rapport_microservices(fiche_poste, payload)
+
+        _runs[run_id].update({
+            "status": "done",
+            "rapport": rapport,
+            "candidats": candidats,
+            "mode_execution": "microservices",
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+        })
+        _save_run(run_id)
+        _push_event(run_id, "run_done", {
+            "rapport_chars": len(rapport),
+            "candidats": len(candidats),
+            "mode_execution": "microservices",
+        })
+        log.info("Run %s : pipeline microservices terminé avec succès.", run_id)
+    except Exception as exc:  # noqa: BLE001
+        log.exception("Run %s : erreur pipeline microservices.", run_id)
+        _runs[run_id].update({
+            "status": "error",
+            "erreur": str(exc),
+            "mode_execution": "microservices",
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+        })
+        _save_run(run_id)
+        _push_event(run_id, "run_error", {"erreur": str(exc)})
+    finally:
+        _close_event_stream(run_id)
+
+
+def _run_pipeline_entry(run_id: str, fiche_poste: str, with_interrupt: bool) -> None:
+    """Choisit le runtime selon la configuration.
+
+    Sans SVC_ORCHESTRATEUR : runtime LangGraph monolithique.
+    Avec SVC_ORCHESTRATEUR : runtime microservices HTTP.
+    """
+    if _SVC_ORCHESTRATEUR:
+        _run_pipeline_microservices(run_id, fiche_poste, with_interrupt)
+    else:
+        _run_pipeline(run_id, fiche_poste, with_interrupt)
+
+
 def _resume_payload(payload) -> dict:
     """Résumé court d'un payload de nœud pour l'émission SSE.
 
@@ -464,6 +657,7 @@ async def health() -> JSONResponse:
     )
     return JSONResponse({
         "status": "ok",
+        "mode_execution": "microservices" if _SVC_ORCHESTRATEUR else "langgraph",
         "runs_total": runs_total,
         "runs_running": runs_running,
     })
@@ -491,6 +685,7 @@ async def recruter(
         "erreur": None,
         "started_at": datetime.now(timezone.utc).isoformat(),
         "finished_at": None,
+        "mode_execution": "microservices" if _SVC_ORCHESTRATEUR else "langgraph",
         # Champs internes pour SSE et HITL
         "_event_queue": queue.Queue(),
         "_hitl_event": threading.Event(),
@@ -501,7 +696,7 @@ async def recruter(
     _save_run(run_id)
 
     background_tasks.add_task(
-        _run_pipeline,
+        _run_pipeline_entry,
         run_id,
         req.fiche_poste,
         not req.no_interrupt,
@@ -539,6 +734,7 @@ async def list_runs() -> JSONResponse:
         {
             "run_id": r["run_id"],
             "status": r["status"],
+            "mode_execution": r.get("mode_execution", "microservices" if _SVC_ORCHESTRATEUR else "langgraph"),
             "started_at": r.get("started_at"),
             "finished_at": r.get("finished_at"),
         }

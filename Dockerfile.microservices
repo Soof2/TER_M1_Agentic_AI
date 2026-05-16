@@ -13,3 +13,6 @@ COPY src/ ./src/
 COPY services/ ./services/
 
 RUN mkdir -p logs data/chromadb
+
+ENV LLM_PROVIDER=groq
+ENV LLM_MODEL=llama-3.3-70b-versatile

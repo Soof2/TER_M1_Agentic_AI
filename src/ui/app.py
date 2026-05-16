@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime
 from typing import Any
 
@@ -102,6 +103,27 @@ def _install_theme() -> None:
           border: 1px solid var(--line);
           border-radius: 20px;
         }
+        .report-markdown table {
+          display: block;
+          width: 100%;
+          overflow-x: auto;
+          border-collapse: collapse;
+          font-size: 0.92rem;
+        }
+        .report-markdown th,
+        .report-markdown td {
+          border: 1px solid rgba(42, 64, 43, 0.16);
+          padding: 8px 10px;
+          vertical-align: top;
+        }
+        .report-markdown th {
+          background: rgba(53, 94, 59, 0.10);
+          color: var(--ink);
+        }
+        .report-markdown pre {
+          white-space: pre-wrap;
+          border-radius: 12px;
+        }
         </style>
         """
     )
@@ -138,6 +160,126 @@ def _candidate_columns() -> list[dict]:
         {"name": "source", "label": "Source", "field": "source", "align": "left"},
         {"name": "remarques", "label": "Remarques", "field": "remarques", "align": "left"},
     ]
+
+
+def _candidate_stats(candidats: list[dict] | None) -> dict[str, int]:
+    stats = {"valide": 0, "douteux": 0, "invalide": 0}
+    for candidat in candidats or []:
+        statut = str(candidat.get("statut", "")).lower()
+        if statut in stats:
+            stats[statut] += 1
+    stats["total"] = sum(stats.values())
+    return stats
+
+
+def _scores_stats(candidats: list[dict] | None) -> dict[str, float]:
+    scores = []
+    for candidat in candidats or []:
+        try:
+            scores.append(float(candidat.get("score_final", candidat.get("score", 0)) or 0))
+        except (TypeError, ValueError):
+            continue
+    if not scores:
+        return {"max": 0.0, "moyenne": 0.0}
+    return {"max": max(scores), "moyenne": round(sum(scores) / len(scores), 1)}
+
+
+def _status_chart_options(stats: dict[str, int]) -> dict:
+    data = [
+        {"value": stats.get("valide", 0), "name": "Valides", "itemStyle": {"color": "#2f855a"}},
+        {"value": stats.get("douteux", 0), "name": "Douteux", "itemStyle": {"color": "#c58742"}},
+        {"value": stats.get("invalide", 0), "name": "Invalides", "itemStyle": {"color": "#c2410c"}},
+    ]
+    if not any(item["value"] for item in data):
+        data = [{"value": 1, "name": "Aucun candidat", "itemStyle": {"color": "#9ca3af"}}]
+    return {
+        "tooltip": {"trigger": "item", "formatter": "{b}: {c} ({d}%)"},
+        "legend": {"bottom": 0, "left": "center"},
+        "series": [{
+            "name": "Statuts",
+            "type": "pie",
+            "radius": ["44%", "72%"],
+            "center": ["50%", "42%"],
+            "avoidLabelOverlap": True,
+            "label": {"formatter": "{b}\n{c}", "fontSize": 12},
+            "data": data,
+        }],
+    }
+
+
+def _extract_report_section(markdown: str, title: str) -> str:
+    """Extrait le contenu d'une section Markdown de niveau 2."""
+    if not markdown:
+        return ""
+    pattern = rf"^## {re.escape(title)}\s*$"
+    match = re.search(pattern, markdown, flags=re.MULTILINE)
+    if not match:
+        return ""
+    start = match.end()
+    next_section = re.search(r"^##\s+", markdown[start:], flags=re.MULTILINE)
+    end = start + next_section.start() if next_section else len(markdown)
+    return markdown[start:end].strip()
+
+
+def _strip_text_fence(text: str) -> str:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:text)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+    return cleaned.strip()
+
+
+def _parse_execution_metrics(markdown: str) -> dict[str, Any]:
+    """Transforme la section métriques du rapport en données affichables."""
+    section = _strip_text_fence(_extract_report_section(markdown, "Métriques d'exécution"))
+    run_match = re.search(r"Run ID\s*:\s*(.+)", section)
+    duration_match = re.search(r"Durée totale\s*:\s*([\d.]+)s", section)
+
+    steps: list[dict[str, Any]] = []
+    for raw_line in section.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("Run ID", "Durée totale", "Détail par étape")):
+            continue
+        match = re.match(r"^(?P<etape>\S+)\s+(?P<duree>[\d.]+|n/a)s\s*(?P<details>.*)$", line)
+        if not match:
+            continue
+        duree_raw = match.group("duree")
+        duree = None if duree_raw == "n/a" else float(duree_raw)
+        steps.append({
+            "etape": match.group("etape"),
+            "duree_s": duree,
+            "duree_label": "n/a" if duree is None else f"{duree:.2f}s",
+            "details": match.group("details").strip() or "-",
+        })
+
+    slowest = max((s for s in steps if s["duree_s"] is not None), key=lambda s: s["duree_s"], default=None)
+    return {
+        "run_id": run_match.group(1).strip() if run_match else "-",
+        "duree_totale_s": float(duration_match.group(1)) if duration_match else 0.0,
+        "steps": steps,
+        "slowest": slowest,
+        "raw": section,
+    }
+
+
+def _metrics_chart_options(metrics: dict[str, Any]) -> dict:
+    steps = [s for s in metrics.get("steps", []) if s.get("duree_s") is not None]
+    top_steps = sorted(steps, key=lambda s: s["duree_s"], reverse=True)[:10]
+    top_steps.reverse()
+    if not top_steps:
+        return {}
+    return {
+        "grid": {"left": 130, "right": 30, "top": 20, "bottom": 30},
+        "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
+        "xAxis": {"type": "value", "name": "secondes"},
+        "yAxis": {"type": "category", "data": [s["etape"] for s in top_steps]},
+        "series": [{
+            "type": "bar",
+            "data": [s["duree_s"] for s in top_steps],
+            "itemStyle": {"color": "#355e3b"},
+            "label": {"show": True, "position": "right", "formatter": "{c}s"},
+        }],
+    }
 
 
 def _build_mermaid(completed: set[str], awaiting_hitl: bool = False) -> str:
@@ -447,16 +589,105 @@ async def rapport_page(run_id: str) -> None:
             ui.label(f"Impossible de charger le rapport : {exc}").classes("text-negative")
             return
 
+        rows = _candidate_rows(rapport.get("candidats"))
+        stats = _candidate_stats(rapport.get("candidats"))
+        score_stats = _scores_stats(rapport.get("candidats"))
+        report_markdown = rapport.get("rapport") or ""
+        recherche_section = _extract_report_section(report_markdown, "Recherches effectuées")
+        execution_metrics = _parse_execution_metrics(report_markdown)
+
         with ui.card().classes("glass-card w-full p-5 gap-4"):
             with ui.row().classes("items-center justify-between w-full"):
                 ui.label("Rapport final").classes("section-title text-4xl font-black text-primary")
                 badge_statut(rapport.get("status", "?"))
-            ui.label(run_id).classes("font-mono text-sm text-grey-7")
-            rows = _candidate_rows(rapport.get("candidats"))
-            if rows:
-                ui.table(columns=_candidate_columns(), rows=rows, row_key="nom").classes("w-full")
-            ui.separator()
-            ui.markdown(rapport.get("rapport") or "Rapport pas encore disponible.").classes("w-full")
+            with ui.row().classes("items-center gap-3 text-sm text-grey-7"):
+                ui.label(run_id).classes("font-mono")
+                ui.label(f"Démarré : {_format_date(rapport.get('started_at'))}")
+                ui.label(f"Terminé : {_format_date(rapport.get('finished_at'))}")
+
+        with ui.row().classes("w-full gap-3"):
+            for label, value, tone in [
+                ("Total candidats", stats["total"], "text-primary"),
+                ("Valides", stats["valide"], "text-green-8"),
+                ("Douteux", stats["douteux"], "text-orange-8"),
+                ("Invalides", stats["invalide"], "text-red-8"),
+                ("Score max", f"{score_stats['max']:.1f}", "text-primary"),
+                ("Score moyen", f"{score_stats['moyenne']:.1f}", "text-primary"),
+            ]:
+                with ui.card().classes("metric-card p-4 grow min-w-32"):
+                    ui.label(str(value)).classes(f"text-3xl font-black {tone}")
+                    ui.label(label).classes("text-sm text-grey-7")
+
+        with ui.card().classes("glass-card w-full p-5 gap-4"):
+            ui.label("Répartition des statuts").classes("text-2xl font-bold text-primary")
+            ui.echart(_status_chart_options(stats)).classes("w-full h-80")
+
+        with ui.tabs().classes("w-full") as tabs:
+            tab_candidats = ui.tab("Candidats", icon="groups")
+            tab_recherches = ui.tab("Recherches", icon="manage_search")
+            tab_metriques = ui.tab("Métriques", icon="bar_chart")
+            tab_rapport = ui.tab("Rapport complet", icon="article")
+
+        with ui.tab_panels(tabs, value=tab_candidats).classes("w-full bg-transparent"):
+            with ui.tab_panel(tab_candidats).classes("p-0"):
+                with ui.card().classes("glass-card w-full p-5 gap-4"):
+                    ui.label("Candidats du run").classes("text-2xl font-bold text-primary")
+                    if rows:
+                        ui.table(columns=_candidate_columns(), rows=rows, row_key="nom").classes("w-full")
+                    else:
+                        ui.label("Aucun candidat retourné pour ce run.").classes("text-grey-7")
+
+            with ui.tab_panel(tab_recherches).classes("p-0"):
+                with ui.card().classes("glass-card w-full p-5 gap-4"):
+                    ui.label("Recherches lancées").classes("text-2xl font-bold text-primary")
+                    if recherche_section:
+                        ui.markdown(recherche_section).classes("report-markdown w-full")
+                    else:
+                        ui.label("Aucune recherche détaillée disponible pour ce run.").classes("text-grey-7")
+
+            with ui.tab_panel(tab_metriques).classes("p-0"):
+                with ui.card().classes("glass-card w-full p-5 gap-4"):
+                    ui.label("Métriques d'exécution").classes("text-2xl font-bold text-primary")
+                    with ui.row().classes("w-full gap-3"):
+                        for label, value in [
+                            ("Run métriques", execution_metrics["run_id"]),
+                            ("Durée totale", f"{execution_metrics['duree_totale_s']:.1f}s"),
+                            ("Étapes mesurées", len(execution_metrics["steps"])),
+                            (
+                                "Étape la plus lente",
+                                execution_metrics["slowest"]["etape"] if execution_metrics["slowest"] else "-",
+                            ),
+                        ]:
+                            with ui.card().classes("metric-card p-4 grow min-w-32"):
+                                ui.label(str(value)).classes("text-2xl font-black text-primary")
+                                ui.label(label).classes("text-sm text-grey-7")
+
+                    chart_options = _metrics_chart_options(execution_metrics)
+                    if chart_options:
+                        ui.label("Temps par étape").classes("text-lg font-bold text-primary")
+                        ui.echart(chart_options).classes("w-full h-96")
+
+                    if execution_metrics["steps"]:
+                        ui.table(
+                            columns=[
+                                {"name": "etape", "label": "Étape", "field": "etape", "align": "left"},
+                                {"name": "duree_label", "label": "Durée", "field": "duree_label", "align": "left"},
+                                {"name": "details", "label": "Détails", "field": "details", "align": "left"},
+                            ],
+                            rows=execution_metrics["steps"],
+                            row_key="etape",
+                        ).classes("w-full")
+                    elif execution_metrics["raw"]:
+                        ui.markdown(f"```text\n{execution_metrics['raw']}\n```").classes("w-full")
+                    else:
+                        ui.label("Aucune métrique détaillée disponible pour ce run.").classes("text-grey-7")
+
+            with ui.tab_panel(tab_rapport).classes("p-0"):
+                with ui.card().classes("glass-card w-full p-5 gap-4"):
+                    ui.label("Rapport Markdown").classes("text-2xl font-bold text-primary")
+                    ui.markdown(
+                        report_markdown or "Rapport pas encore disponible."
+                    ).classes("report-markdown w-full")
 
 
 @ui.page("/rag")

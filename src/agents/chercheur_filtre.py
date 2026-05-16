@@ -40,6 +40,8 @@ _NOISE_KEYWORDS = (
     "postulez",
     "posez votre candidature",
     "candidature spontanée",
+    "les recherches suivantes",
+    "recherche d'emploi",
     "cdi à pourvoir",
     "cdd à pourvoir",
     "offre d'emploi",
@@ -112,97 +114,51 @@ _NOISE_KEYWORDS = (
     "eleves accompagnés",
 )
 
-# Domaines d'agrégateurs. Testés sur l'URL uniquement (plus fiable que le
-# texte car les agrégateurs ont des titres anodins).
+# Domaines techniques à écarter avant analyse. On évite les blocklists de
+# job boards : A4/A5 doivent voir la page et produire le score/statut.
 _NOISE_DOMAINS = (
-    "indeed.com",
-    "indeed.fr",
-    "glassdoor.com",
-    "glassdoor.fr",
-    "jooble.org",
-    "monster.fr",
-    "monster.com",
-    "welcometothejungle.com",
-    "hellowork.com",
-    "apec.fr",
-    "pole-emploi.fr",
-    "francetravail.fr",
-    "talent.com",
-    "sagexa.com",
-    "meteojob.com",
-    "cadremploi.fr",
-    "keljob.com",
-    "regionsjob.com",
-    "jobijoba.com",
-    # Agrégateurs anglophones détectés en production
-    "startup.jobs",
-    "devjobsscanner.com",
-    "hireitpeople.com",
-    "python.org/jobs",
-    "selbyjennings.com",
-    "lever.co",
-    "greenhouse.io",
-    "workable.com",
-    "recruiter.com",
-    "ziprecruiter.com",
-    "simplyhired.com",
-    "careerbuilder.com",
-    "dice.com",
-    "reed.co.uk",
-    "totaljobs.com",
-    "jobsite.co.uk",
-    # Pages qui listent des prestataires, formations ou cours, pas des profils
-    # candidats directement contactables dans le cadre du recrutement.
-    "codeur.com",
-    "freelance-informatique.fr",
-    "orsys.fr",
-    "humancoders.com",
-    "aquilapp.fr",
-    "superprof.fr",
-    # Liens publicitaires Bing
     "bing.com/aclick",
     "bing.com/maps",
 )
 
-# Fragments de chemin URL qui trahissent une page d'offre (indépendamment du domaine)
+# Fragments techniques qui trahissent une page de résultats ou une publicité,
+# pas une page à analyser comme candidat.
 _NOISE_URL_PATHS = (
-    "/jobs/",
-    "/job/",
-    "/offre/",
-    "/offres/",
-    "/careers/",
-    "/career/",
-    "/recrutement/",
-    "/emploi/",
-    "/job-board/",
-    "/job-offer/",
-    "/senior-python-developer-",  # pattern titre de poste dans URL
-    "/python-developer-jobs",
+    "/search?",
+    "?q=",
+    "/maps/",
 )
 
 
 def _is_aggregated_profile(title: str, profil_brut: str) -> bool:
     """Détecte les pages qui agrègent plusieurs profils (résultats de recherche LinkedIn)."""
     texte = f"{title} {profil_brut}"
+    title_lower = title.lower()
     # Plusieurs URLs /in/ dans le contenu = page de résultats
     if texte.lower().count("linkedin.com/in/") >= 3:
         return True
+    if texte.lower().count("fr.linkedin.com/in/") >= 3:
+        return True
     # Titre DDG avec plusieurs personnes : "Nom1 - Titre | LinkedInNom2 - Titre"
     # Le mot "linkedin" apparaît plusieurs fois dans le titre (en minuscules ou majuscules)
-    if title.lower().count("linkedin") >= 2:
+    if title_lower.count("linkedin") >= 2:
         return True
     # Plusieurs " - LinkedIn" ou "| LinkedIn" dans le titre
     if title.count(" - LinkedIn") >= 2 or title.count("| LinkedIn") >= 2:
         return True
     # Titre avec plusieurs tirets séparateurs typiques des noms LinkedIn concaténés
     # Ex: "Nom1 - Titre1 ...Nom2 - Titre2 ...Nom3"
-    if title.count(" ... ") >= 2 and title.lower().count("linkedin") >= 1:
+    if title.count(" ... ") >= 2 and title_lower.count("linkedin") >= 1:
+        return True
+    if title.count("...") >= 2 and title_lower.count("linkedin") >= 1:
+        return True
+    if title.count(" - ") >= 4 and title_lower.count("linkedin") >= 1:
         return True
     return False
 
 
 def _is_noise_url(url: str) -> bool:
-    """Vrai si l'URL appartient à un agrégateur d'offres d'emploi ou pointe vers une offre."""
+    """Vrai seulement pour le bruit technique évident avant analyse."""
     if not url:
         return False
     lowered = url.lower()
@@ -221,6 +177,26 @@ def _is_noise_text(text: str) -> bool:
     return any(kw in lowered for kw in _NOISE_KEYWORDS)
 
 
+def _triage_priority(hit: dict, profil_brut: str) -> int:
+    """Priorise les pages les plus susceptibles d'être des profils directs.
+
+    Ce n'est pas une décision finale : A4/A5 restent responsables du score
+    et du statut. Le tri évite seulement que les pages de recherche occupent
+    tous les slots quand MAX_PROFILS_RECHERCHE est limité.
+    """
+    url = (hit.get("url") or "").lower()
+    texte = f"{hit.get('title', '')} {hit.get('body', '')} {profil_brut}".lower()
+    if "linkedin." in url and "/in/" in url:
+        return 0
+    if "github.com/" in url and not any(p in url for p in ("/topics/", "/orgs/", "/marketplace/", "/search")):
+        return 1
+    if "malt.fr/profile/" in url or "doyoubuzz.com/" in url:
+        return 2
+    if _is_noise_text(texte):
+        return 50
+    return 20
+
+
 # ---------------------------------------------------------------------------
 # Nœud LangGraph
 # ---------------------------------------------------------------------------
@@ -233,37 +209,30 @@ def filtre_node(state: GraphState) -> dict:
     hits = state.get("resultats_bruts", [])
     _log.info("Filtrage de %d hits bruts...", len(hits))
 
-    # --- Étape 1 : pré-filtre (URL + mots-clés snippet) ---
+    # --- Étape 1 : pré-filtre technique minimal ---
     pre_filtered: list[dict] = []
     n_url_drop = 0
-    n_kw_drop = 0
     for h in hits:
         if _is_noise_url(h.get("url", "")):
             n_url_drop += 1
             continue
-        snippet = f"{h.get('title', '')} {h.get('body', '')}"
-        if _is_noise_text(snippet):
-            n_kw_drop += 1
-            continue
         pre_filtered.append(h)
 
     _log.info(
-        "Pré-filtre : %d URL domain + %d mots-clés = %d éliminés, %d restants.",
-        n_url_drop, n_kw_drop, n_url_drop + n_kw_drop, len(pre_filtered),
+        "Pré-filtre technique : %d URL éliminées, %d restantes.",
+        n_url_drop, len(pre_filtered),
     )
 
     # Limiter le nombre de pages à scraper (marge pour le post-filtre)
-    a_scraper = pre_filtered[: MAX_PROFILS_RECHERCHE * 2]
+    a_scraper = pre_filtered[: MAX_PROFILS_RECHERCHE * 3]
 
-    # --- Étape 2 : scraping + post-filtre ---
-    candidats: list[Candidat] = []
+    # --- Étape 2 : scraping + triage ---
+    candidats_priorises: list[tuple[int, Candidat]] = []
     n_post_drop = 0
     n_scrape_fail = 0
+    n_pages_signalees = 0
 
     for i, h in enumerate(a_scraper, 1):
-        if len(candidats) >= MAX_PROFILS_RECHERCHE:
-            break
-
         url = h["url"]
         _log.info("  Scraping %d/%d : %s", i, len(a_scraper), url[:70])
         scraped = extraire_page_web_raw(url)
@@ -275,20 +244,36 @@ def filtre_node(state: GraphState) -> dict:
         else:
             profil_brut = scraped
 
-        # Post-filtre : le contenu complet peut révéler une offre ou un agrégat
-        if _is_noise_text(profil_brut) or _is_aggregated_profile(h.get("title", ""), profil_brut):
+        # Post-filtre strict : on retire seulement les pages agrégées qui
+        # mélangent plusieurs personnes dans un seul résultat.
+        if _is_aggregated_profile(h.get("title", ""), profil_brut):
             n_post_drop += 1
             continue
 
-        candidats.append(Candidat(
+        priority = _triage_priority(h, profil_brut)
+        if _is_noise_text(f"{h.get('title', '')} {h.get('body', '')} {profil_brut}"):
+            n_pages_signalees += 1
+            profil_brut = (
+                "[Signal A3c] Cette page ressemble peut-être à une offre, "
+                "une liste ou un contenu non-candidat. A4/A5 doivent le "
+                "vérifier et scorer en conséquence.\n\n"
+                + profil_brut
+            )
+
+        candidats_priorises.append((priority, Candidat(
             id=str(uuid.uuid4())[:8],
             nom=h.get("title", "Inconnu") or "Inconnu",
             source=h.get("source", "web"),
             profil_brut=profil_brut,
             url=url or None,
-        ))
+        )))
 
-    n_total_drop = n_url_drop + n_kw_drop + n_post_drop
+    candidats = [
+        candidat
+        for _, candidat in sorted(candidats_priorises, key=lambda item: item[0])
+    ][:MAX_PROFILS_RECHERCHE]
+
+    n_total_drop = n_url_drop + n_post_drop
     taux_bruit = round(n_total_drop / len(hits), 2) if hits else 0.0
 
     _log.info(
@@ -303,7 +288,7 @@ def filtre_node(state: GraphState) -> dict:
         n_entree=len(hits),
         n_sortie=len(candidats),
         n_drop_url=n_url_drop,
-        n_drop_kw=n_kw_drop,
+        n_pages_signalees=n_pages_signalees,
         n_drop_post=n_post_drop,
         taux_bruit=taux_bruit,
         n_scrape_fail=n_scrape_fail,

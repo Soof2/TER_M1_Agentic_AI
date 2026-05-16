@@ -19,9 +19,8 @@ COPY services/ ./services/
 RUN mkdir -p logs data/chromadb
 
 # Variables d'environnement par défaut (surchargeables via docker-compose ou CLI)
-ENV OLLAMA_MODEL=kimi-k2.5:cloud
-ENV OLLAMA_PROVIDER=ollama
-ENV OLLAMA_HOST=http://ollama:11434
+ENV LLM_PROVIDER=groq
+ENV LLM_MODEL=llama-3.3-70b-versatile
 ENV SCORE_SEUIL_CONTACT=75
 ENV MAX_PROFILS_RECHERCHE=15
 

@@ -5,13 +5,45 @@ Prototype développé dans le cadre du TER M1 — *Étude des architectures des 
 
 ---
 
-## Nouveautés (mai 2026)
+## Lancement rapide Docker
 
-### Migration LLM : Ollama → Groq
-Le projet utilise désormais **Groq** comme provider LLM (`llama-3.3-70b-versatile`, free tier, sans CB). Ollama local causait des crashes sur Mac. La config s'adapte via `GROQ_API_KEY` dans `.env`. En cas de dépassement du quota journalier (100k tokens/jour, 12k TPM), basculer sur `llama-3.1-8b-instant`.
+Le projet utilise **Groq** par défaut. Il peut être lancé sur n'importe quelle
+machine disposant de Docker, sans serveur LLM local.
+
+```bash
+cp .env.example .env
+# Renseigner GROQ_API_KEY=gsk_... dans .env
+```
+
+Mode **LangGraph monolithique** :
+
+```bash
+docker compose up --build
+```
+
+Mode **SMA microservices** :
+
+```bash
+docker compose -f docker-compose.microservices.yml up --build
+```
+
+Accès :
+
+- UI : http://localhost:8080
+- API : http://localhost:8000
+- Swagger : http://localhost:8000/docs
+
+### Deux modes d'exécution
+
+Le projet conserve deux matérialisations du même SMA AI :
+
+- **Mode LangGraph monolithique** : référence Agentic AI avec graphe d'état,
+  `Send`, HITL, routage conditionnel et mémoire RAG dans un runtime Python.
+- **Mode microservices** : agents exposés comme services FastAPI séparés,
+  orchestrés par `svc-orchestrateur` via HTTP.
 
 ### Architecture microservices
-En complément du mode monolithique LangGraph, une architecture microservices est disponible dans `services/` : 6 services indépendants (analyste, chercheur, évaluateur, vérificateur, recruteur, orchestrateur HTTP) orchestrés par `docker-compose.microservices.yml`. Le mode local `./run_local.sh` reste la référence pour le développement.
+En complément du mode monolithique LangGraph, une architecture microservices est disponible dans `services/` : 6 services indépendants (analyste, chercheur, évaluateur, vérificateur, recruteur, orchestrateur HTTP) orchestrés par `docker-compose.microservices.yml`.
 
 ```bash
 # Mode microservices Docker
@@ -146,40 +178,23 @@ cp .env.example .env
 
 ## Lancement rapide
 
-### 1. Démarrer Ollama
-
-Dans un terminal séparé, si Ollama n'est pas déjà lancé :
+### Option recommandée : Docker
 
 ```bash
-ollama serve
+cp .env.example .env
+# Renseigner GROQ_API_KEY dans .env
 ```
 
-Vérifier que le serveur répond :
+Mode LangGraph monolithique :
 
 ```bash
-curl http://localhost:11434/api/tags
+docker compose up --build
 ```
 
-### 2. Choisir le modèle
-
-Dans `.env`, modifier :
-
-```env
-OLLAMA_MODEL=mistral
-OLLAMA_PROVIDER=ollama
-```
-
-Le modèle doit exister dans Ollama :
+Mode SMA microservices :
 
 ```bash
-ollama list
-ollama pull mistral
-```
-
-### 3. Lancer API + UI en une commande
-
-```bash
-./run_local.sh
+docker compose -f docker-compose.microservices.yml up --build
 ```
 
 Puis ouvrir :
@@ -187,13 +202,12 @@ Puis ouvrir :
 - UI : `http://localhost:8080`
 - API docs : `http://localhost:8000/docs`
 
-Arrêt propre : `Ctrl+C` dans le terminal qui a lancé `./run_local.sh`.
-
-Les logs sont dans :
+Arrêt :
 
 ```bash
-tail -f logs/api_local.log
-tail -f logs/ui_local.log
+docker compose down
+# ou, pour le mode microservices :
+docker compose -f docker-compose.microservices.yml down
 ```
 
 ---
@@ -203,15 +217,13 @@ tail -f logs/ui_local.log
 ### Mode CLI
 
 ```bash
-ollama serve
-
-OLLAMA_MODEL=mistral python3 -m src.main --no-interrupt "Développeur Python senior, 5 ans, Paris"
+python3 -m src.main --no-interrupt "Développeur Python senior, 5 ans, Paris"
 
 # Avec human-in-the-loop
-OLLAMA_MODEL=mistral python3 -m src.main "Développeur Python senior, 5 ans, Paris"
+python3 -m src.main "Développeur Python senior, 5 ans, Paris"
 
 # Depuis un fichier
-OLLAMA_MODEL=mistral python3 -m src.main --fichier fiche_poste.txt
+python3 -m src.main --fichier fiche_poste.txt
 ```
 
 Le mode CLI est utile pour tester rapidement le graphe sans interface. Pour la démo, utiliser plutôt l'UI.
@@ -228,8 +240,6 @@ curl -X POST http://localhost:8000/recruter \
 
 curl http://localhost:8000/rapport/<run_id>
 ```
-
-Si `OLLAMA_HOST` n'est pas défini, le projet utilise `http://localhost:11434` par défaut.
 
 ### Mode UI local manuel
 
@@ -269,7 +279,7 @@ API_PORT=8001 UI_PORT=8081 ./run_local.sh
 
 ```bash
 cp .env.example .env
-# modifier OLLAMA_MODEL dans .env si besoin
+# renseigner GROQ_API_KEY dans .env
 docker compose up --build
 ```
 
@@ -292,8 +302,6 @@ docker compose logs -f sma-ui
 docker compose down
 ```
 
-Le service Docker `ollama` monte `~/.ollama` dans le conteneur. Les modèles déjà téléchargés sur la machine hôte sont donc réutilisés.
-
 ### Mode CLI via Docker
 
 ```bash
@@ -304,37 +312,15 @@ docker compose --profile cli run --rm sma-cli python -m src.main --no-interrupt 
 
 ## Changer de modèle LLM
 
-Le modèle est choisi avec `OLLAMA_MODEL`.
+Le modèle est choisi avec `LLM_MODEL`.
 
-### En local
-
-1. Télécharger le modèle :
-
-```bash
-ollama pull mistral
-```
-
-2. Modifier `.env` :
+Exemple dans `.env` :
 
 ```env
-OLLAMA_MODEL=mistral
-OLLAMA_PROVIDER=ollama
+LLM_PROVIDER=groq
+LLM_MODEL=llama-3.1-8b-instant
+GROQ_API_KEY=gsk_...
 ```
-
-3. Relancer le projet :
-
-```bash
-./run_local.sh
-```
-
-### Pour une seule commande
-
-```bash
-OLLAMA_MODEL=mistral ./run_local.sh
-OLLAMA_MODEL=mistral python3 -m src.main --no-interrupt "Développeur Python senior Paris"
-```
-
-### Avec Docker
 
 Modifier `.env`, puis relancer :
 
@@ -346,10 +332,8 @@ docker compose up --build
 
 | Modèle | Usage |
 |---|---|
-| `mistral` | Léger, rapide, correct pour tester |
-| `llama3.1` | Meilleure qualité générale si disponible |
-| `qwen2.5` | Bon respect du JSON selon les versions |
-| `kimi-k2.5:cloud` | Qualité plus élevée si Ollama Cloud est configuré |
+| `llama-3.3-70b-versatile` | Qualité élevée, modèle par défaut |
+| `llama-3.1-8b-instant` | Plus léger, utile en cas de quota ou de latence |
 
 Important : A4 et A5 exigent des réponses JSON. Si un modèle ne respecte pas le JSON, le run peut échouer explicitement, surtout sur A5. Dans ce cas, essayer un modèle plus fiable en sortie structurée.
 
@@ -359,8 +343,10 @@ Important : A4 et A5 exigent des réponses JSON. Si un modèle ne respecte pas l
 
 | Variable | Défaut | Description |
 |---|---|---|
-| `OLLAMA_MODEL` | `kimi-k2.5:cloud` | Modèle LLM Ollama |
-| `OLLAMA_HOST` | `http://localhost:11434` | URL du serveur Ollama |
+| `LLM_PROVIDER` | `groq` | Provider LLM utilisé par LangChain |
+| `LLM_MODEL` | `llama-3.3-70b-versatile` | Modèle Groq utilisé |
+| `GROQ_API_KEY` | *(obligatoire)* | Clé API Groq |
+| `SVC_ORCHESTRATEUR` | *(vide)* | Active le mode microservices dans l'API Gateway |
 | `GITHUB_TOKEN` | *(optionnel)* | Token GitHub (5000 req/h vs 60 sans) |
 | `STACKOVERFLOW_KEY` | *(optionnel)* | Clé Stack Exchange API |
 | `SCORE_SEUIL_CONTACT` | `75` | Score minimum pour contacter un candidat |
@@ -379,25 +365,20 @@ Important : A4 et A5 exigent des réponses JSON. Si un modèle ne respecte pas l
 
 ## Dépannage
 
-### `Connection refused` vers Ollama
+### `GROQ_API_KEY est requis`
 
-Vérifier qu'Ollama tourne :
-
-```bash
-ollama serve
-curl http://localhost:11434/api/tags
-```
-
-En Docker, l'API doit utiliser `OLLAMA_HOST=http://ollama:11434`, déjà défini dans `docker-compose.yml`.
-
-### Le modèle n'existe pas
+Créer ou corriger `.env` :
 
 ```bash
-ollama list
-ollama pull mistral
+cp .env.example .env
+nano .env
 ```
 
-Puis mettre le même nom dans `.env`.
+Puis renseigner :
+
+```env
+GROQ_API_KEY=gsk_...
+```
 
 ### Ports déjà utilisés
 
