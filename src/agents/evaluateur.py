@@ -35,6 +35,31 @@ def evaluateur_node(state: dict) -> dict:
 
     log.info("Évaluation de : %s (source: %s)", candidat['nom'], candidat['source'])
 
+    # --- Cache RAG : si l'URL a déjà été évaluée pour un poste similaire,
+    # on réutilise le score sans appeler le LLM. ---
+    url = candidat.get("url") or ""
+    if url:
+        try:
+            cache = get_memoire().get_score_cache(url, fiche_poste if fiche_poste else None)
+            if cache is not None:
+                log.info(
+                    "Cache RAG : %s → %.1f/100 (score réutilisé, LLM skippé)",
+                    candidat["nom"], cache["score"],
+                )
+                m.fin(f"A4_{candidat['id']}", candidat_nom=candidat['nom'],
+                      score=cache["score"], source=candidat["source"], cache_hit=True)
+                return {
+                    "candidats_scores": [CandidatScore(
+                        candidat_id=candidat["id"],
+                        nom=candidat["nom"],
+                        score_global=cache["score"],
+                        scores_detail={},
+                        resume=f"[Cache RAG] {cache['remarques'][:200]}" if cache["remarques"] else "[Cache RAG] Score issu d'un run précédent sur poste similaire.",
+                    )]
+                }
+        except Exception as _e:
+            log.debug("Cache RAG indisponible : %s", _e)
+
     # --- Contexte RAG : profils similaires, restreints aux fiches de poste
     # comparables à la fiche courante (évite la calibration inter-postes). ---
     contexte_rag = ""

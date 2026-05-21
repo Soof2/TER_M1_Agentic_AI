@@ -1,0 +1,1006 @@
+\documentclass[12pt,a4paper]{report}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage[top=2.5cm,bottom=2.5cm,left=3cm,right=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{parskip}
+\setlength{\parindent}{0pt}
+
+\usepackage{xcolor}
+\usepackage{colortbl}
+\definecolor{primary}{RGB}{30,80,110}
+\definecolor{lightblue}{RGB}{220,235,245}
+\definecolor{lightgray}{RGB}{245,245,245}
+\definecolor{codebg}{RGB}{248,248,252}
+
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+
+\usepackage{listings}
+\lstset{
+  backgroundcolor=\color{codebg},
+  basicstyle=\footnotesize\ttfamily,
+  keywordstyle=\color{primary}\bfseries,
+  commentstyle=\color{gray}\itshape,
+  stringstyle=\color{teal},
+  numberstyle=\tiny\color{gray},
+  numbers=left, numbersep=8pt,
+  frame=single, rulecolor=\color{gray!30},
+  breaklines=true, showstringspaces=false,
+  language=Python,
+  xleftmargin=15pt
+}
+
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\nouppercase{\leftmark}}
+\fancyhead[R]{\small TER M1 --- Agentic AI}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{graphicx}
+
+% Boîtes légères
+\newcommand{\infobox}[2]{%
+  \medskip
+  \colorbox{lightblue}{\parbox{0.95\textwidth}{\smallskip\textbf{\color{primary}#1}\\[2pt]#2\smallskip}}
+  \medskip
+}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{document}
+
+% ── Page de titre ─────────────────────────────────────────────────────────────
+\begin{titlepage}
+\begin{center}
+\vspace*{1.5cm}
+{\Large\bfseries Université de Montpellier --- Master Informatique}\\[0.4em]
+{\large Intelligence Artificielle \& Data}\\[0.8em]
+\rule{\textwidth}{1.5pt}\\[1.5em]
+{\LARGE\bfseries\color{primary}
+Architectures Logicielles pour l'IA Agentique\\[0.5em]}
+{\large\bfseries
+Systèmes Multi-Agents, Variabilité Architecturale\\
+et Prototype de Recrutement Automatisé}\\[0.8em]
+\rule{\textwidth}{1.5pt}\\[1.5em]
+{\large Travaux d'Étude et de Recherche (TER) --- Master 1}\\[0.4em]
+{\large Année universitaire 2025--2026}\\[2cm]
+\begin{tabular}{ll}
+\textbf{Auteurs :} & Sofiane Dzermane\\
+& [Prénom Nom]\\[1em]
+\textbf{Encadrant :} & M. Abdelhak-Djamel Seriai\\[1em]
+\textbf{Date :} & Mai 2026\\
+\end{tabular}
+\end{center}
+\end{titlepage}
+
+% ── Résumé ────────────────────────────────────────────────────────────────────
+\chapter*{Résumé}
+\addcontentsline{toc}{chapter}{Résumé}
+
+Ce rapport présente l'intégralité des travaux réalisés dans le cadre du TER de
+Master~1 Informatique, portant sur l'étude des architectures logicielles pour
+l'intelligence artificielle agentique. La démarche s'est articulée en trois temps :
+une phase d'études bibliographiques approfondies sur les Systèmes Multi-Agents (SMA)
+classiques et l'Agentic AI contemporaine, une phase de sélection du scénario applicatif,
+et une phase de conception et développement d'un prototype opérationnel.
+
+Le livrable final est un système de recrutement automatisé multi-agents implémentant
+\textbf{huit agents spécialisés} orchestrés par LangGraph, une mémoire contextuelle
+vectorielle inter-runs via ChromaDB (RAG), un mécanisme Human-in-the-Loop, deux modes
+architecturaux déployables (monolithique et microservices Docker), une API REST avec
+streaming SSE, une interface graphique NiceGUI et \textbf{91 tests automatisés}.
+
+\medskip
+\textbf{Mots-clés :} Systèmes Multi-Agents, Agentic AI, LangGraph, RAG, Groq,
+Feature Model, Microservices, Human-in-the-Loop, SE4AI, AI4SE.
+
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+This report presents the work carried out as part of the Master~1 Computer Science
+research project (TER), focusing on the study and implementation of software
+architectures for agentic AI-based systems. The methodology comprised a thorough
+bibliographic study of classical Multi-Agent Systems and contemporary Agentic AI,
+followed by the design and development of an automated recruitment system. The
+prototype implements eight specialised LangGraph agents, cross-run vector memory
+(ChromaDB), Human-in-the-Loop, Docker microservices, REST API with SSE streaming,
+NiceGUI interface and 91 automated tests.
+
+\tableofcontents
+\listoffigures
+\listoftables
+
+% =============================================================================
+\chapter{Introduction}
+\label{chap:intro}
+% =============================================================================
+
+\section{Contexte général}
+
+L'essor des modèles de langage de grande taille (LLM) depuis 2022 a profondément
+reconfiguré la façon dont les systèmes logiciels intègrent l'intelligence artificielle.
+Ces modèles ne se contentent plus de générer du texte : ils servent de \textit{couche
+cognitive} dans des systèmes distribués capables de planifier, percevoir leur
+environnement, sélectionner des outils et prendre des décisions autonomes. Ce mouvement,
+désigné sous le terme d'\textbf{Agentic AI}, interroge fondamentalement les architectures
+logicielles existantes.
+
+Ce TER s'inscrit à l'intersection de deux axes complémentaires :
+
+\begin{description}
+  \item[AI4SE] (\textit{Artificial Intelligence for Software Engineering}) : l'IA
+        comme outil au service de l'ingénierie logicielle --- génération de code,
+        revue automatique, tests, optimisation architecturale.
+  \item[SE4AI] (\textit{Software Engineering for AI}) : le génie logiciel comme
+        cadre méthodologique pour industrialiser les systèmes IA --- architecture,
+        gouvernance, traçabilité, tests, MLOps.
+\end{description}
+
+\section{Objectifs du TER}
+
+L'encadrant, M. Seriai, a défini trois objectifs :
+
+\begin{enumerate}
+  \item \textbf{Étudier la variabilité architecturale} des systèmes logiciels basés
+        sur l'IA et la formaliser sous forme d'un feature model.
+  \item \textbf{Identifier des critères de choix} architecturaux orientant la
+        sélection d'un style d'architecture adapté.
+  \item \textbf{Implémenter une architecture de référence Agentic AI} : microservices,
+        API Gateway, RAG, observabilité, Human-in-the-Loop, illustrée par un scénario
+        applicatif réaliste.
+\end{enumerate}
+
+\section{Démarche globale}
+
+\begin{enumerate}
+  \item Phase bibliographique : 6 études SMA + 11 études Agentic AI + synthèses +
+        analyse comparative.
+  \item Phase de sélection du scénario : comparaison de plusieurs domaines d'application.
+  \item Phase de développement itératif du prototype.
+\end{enumerate}
+
+% =============================================================================
+\chapter{Phase d'études bibliographiques}
+\label{chap:etudes}
+% =============================================================================
+
+\section{Inventaire du dossier d'études}
+
+Le dossier \texttt{Etudes/} contient l'ensemble des productions de la phase
+bibliographique. \textbf{17 articles scientifiques} ont été lus, analysés et
+synthétisés. Trois documents de synthèse ont été produits.
+
+\begin{table}[H]
+\centering
+\caption{Inventaire du dossier \texttt{Etudes/}}
+\label{tab:etudes}
+\begin{tabularx}{\textwidth}{L{5cm}C{1.5cm}L{6.5cm}}
+\toprule
+\textbf{Fichier} & \textbf{Type} & \textbf{Contenu} \\
+\midrule
+\texttt{etudes\_sma\_/etude\_1} & PDF & Cours fondateur SMA \\
+\texttt{etudes\_sma\_/etude\_2} & PDF & Référence académique française \\
+\texttt{etudes\_sma\_/etude\_3} & PDF & Visual survey agent-based computing \\
+\texttt{etudes\_sma\_/etude\_4} & PDF & General survey théorie/applications \\
+\texttt{etudes\_sma\_/etude\_5} & PDF & CMU : Multi-Agent Reinforcement Learning \\
+\texttt{etudes\_sma\_/etude\_6} & PDF & Perspectives systèmes distribués \\
+\texttt{etudes\_sma\_/synthese} & PDF & \textbf{Synthèse produite — SMA} \\
+\addlinespace
+\texttt{etudes\_agentic\_/etude\_1} & PDF & Wavestone : Agentic AI Playbook \\
+\texttt{etudes\_agentic\_/etude\_2} & PDF & Abou Ali : double paradigme \\
+\texttt{etudes\_agentic\_/etude\_3} & PDF & Alva \& Pandey : architecture modulaire \\
+\texttt{etudes\_agentic\_/etude\_4} & PDF & Sapkota : AI Agents vs Agentic AI \\
+\texttt{etudes\_agentic\_/etude\_5} & PDF & Patel : sécurité et risques LLM \\
+\texttt{etudes\_agentic\_/etude\_6} & PDF & Hughes : safety et alignement \\
+\texttt{etudes\_agentic\_/etude\_7} & PDF & Vaidhyanathan : comparaison frameworks \\
+\texttt{etudes\_agentic\_/etude\_8} & PDF & TOSEM : SE4AI/AI4SE \\
+\texttt{etudes\_agentic\_/etude\_9} & PDF & Milosevic : communautés agentiques \\
+\texttt{etudes\_agentic\_/etude\_10} & PDF & Schneider : générative vers agentique \\
+\texttt{etudes\_agentic\_/etude\_11} & PDF & Pati : paradigme Agentic AI \\
+\texttt{etudes\_agentic\_/synthese} & PDF & \textbf{Synthèse produite --- Agentic AI} \\
+\addlinespace
+\texttt{analyse\_comparative\_SMA\_AgenticAI} & PDF & \textbf{Analyse croisée produite} \\
+\texttt{comparaison\_frameworks.csv} & CSV & \textbf{Glossaire des concepts} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Synthèse des études SMA}
+
+\subsection{Définitions et fondements}
+
+Selon Dorri et al. (2018), un Système Multi-Agents est \textit{``un ensemble d'agents
+autonomes interagissant dans un environnement partagé pour atteindre des objectifs
+individuels ou collectifs.''}
+Maldonado et al. (2024) identifient cinq composants clés : Agents, Environnement,
+Interactions, Organisation, Objectifs. Tout agent possède quatre propriétés
+essentielles : \textbf{Autonomie}, \textbf{Réactivité}, \textbf{Proactivité},
+\textbf{Sociabilité}.
+
+\subsection{Architectures organisationnelles}
+
+Trois styles sont distingués dans la littérature :
+
+\begin{itemize}
+  \item \textbf{Centralisée} : un agent maître coordonne les subordonnés. Avantage :
+        cohérence globale. Inconvénient : point unique de défaillance.
+  \item \textbf{Décentralisée} : la coordination émerge des interactions locales.
+        Avantage : robustesse. Inconvénient : comportement global difficile à prédire.
+  \item \textbf{Hiérarchique} : multi-niveaux, compromis le plus répandu en pratique.
+\end{itemize}
+
+\subsection{Protocoles formels de coordination}
+
+Le \textit{General Survey} (étude 4) formalise : Contract Net Protocol, théorie des
+jeux, mécanismes d'enchères, consensus distribué, et ACL (\textit{Agent Communication
+Language}). Ces outils garantissent stabilité, optimalité et convergence.
+
+\subsection{Le MARL : pont vers l'apprentissage}
+
+Le CMU Paper (étude 5) établit un pont via le \textbf{Multi-Agent Reinforcement
+Learning (MARL)}, permettant aux agents d'adapter dynamiquement leurs stratégies.
+Les défis : non-stationnarité, instabilité de convergence, équilibre
+coopération/compétition.
+
+\section{Synthèse des études Agentic AI}
+
+\subsection{Clarification conceptuelle}
+
+La synthèse Agentic AI converge vers une clarification essentielle : l'Agentic AI
+ne se réduit ni à un agent LLM augmenté d'outils, ni aux SMA classiques. Trois
+niveaux distincts émergent :
+
+\begin{description}
+  \item[AI Agents] (Sapkota et al.) : systèmes modulaires LLM, spécialisés via
+        prompt engineering.
+  \item[Agentic AI] (Schneider ; Pati) : paradigme orienté objectifs, planification
+        autonome, mémoire persistante, adaptation dynamique.
+  \item[Communautés agentiques] (Milosevic et Rabhi) : écosystèmes hybrides
+        humains-IA avec gouvernance formelle.
+\end{description}
+
+La trajectoire évolutive identifiée est :
+\[
+\text{GenAI} \to \text{AI Agents} \to \text{Agentic AI} \to
+\text{Communautés agentiques} \to \text{Écosystèmes hybrides gouvernés}
+\]
+
+\subsection{Double paradigme : symbolique vs neuronal}
+
+Abou Ali et al. (2026) proposent un cadre analytique fondamental :
+
+\begin{table}[H]
+\centering
+\caption{Double paradigme Symbolique vs Neuronal (Abou Ali et al., 2026)}
+\label{tab:paradigmes}
+\begin{tabularx}{\textwidth}{L{3cm}L{5.5cm}L{5cm}}
+\toprule
+\textbf{Paradigme} & \textbf{Caractéristiques} & \textbf{Domaines} \\
+\midrule
+\textbf{Symbolique} & Planification déterministe, état persistant, vérification formelle & Santé critique \\
+\textbf{Neuronal} & Orchestration LLM, génération probabiliste, adaptabilité élevée & Finance, environnements dynamiques \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Les études convergent vers une trajectoire \textbf{neuro-symbolique hybride}, que
+notre prototype incarne directement : agents LLM (neuronal) + guards déterministes
+(symbolique).
+
+\subsection{Comparaison des frameworks}
+
+L'étude 7 (Vaidhyanathan et Taibi, 2026) et le glossaire CSV produit constituent
+la pièce maîtresse de la sélection technique :
+
+\begin{table}[H]
+\centering
+\caption{Comparaison des frameworks Agentic AI}
+\label{tab:frameworks}
+\begin{tabularx}{\textwidth}{L{2.3cm}L{2.5cm}C{1.8cm}C{1.5cm}L{3.8cm}}
+\toprule
+\textbf{Framework} & \textbf{Coordination} & \textbf{État partagé} & \textbf{HITL} & \textbf{Points forts} \\
+\midrule
+\rowcolor{lightblue}
+\textbf{LangGraph} & Graphe orienté & TypedDict riche & Natif & Contrôle fin, traçabilité \\
+CrewAI & Rôles/délégation & Partiel & Limité & Prise en main rapide \\
+AutoGen & Conversation & Limité & Oui & Flexibilité, multi-LLM \\
+OpenAI Swarm & Handoff & Absent & Non & Légèreté \\
+MetaGPT & SOP rigides & Oui & Partiel & Processus logiciel \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+LangGraph est le seul framework qui supporte nativement le blackboard (TypedDict),
+le fan-out parallèle (\texttt{Send()}), le HITL sans contournement, et est
+indépendant du fournisseur LLM.
+
+\section{Analyse comparative SMA / Agentic AI}
+
+Le document \texttt{analyse\_comparative\_SMA\_AgenticAI.pdf} identifie cinq
+convergences et cinq divergences structurelles.
+
+\medskip
+\colorbox{lightblue}{\parbox{0.95\textwidth}{\smallskip
+\textbf{\color{primary}Conclusion majeure de l'analyse comparative}\\
+\textit{``Les SMA ne s'opposent pas à l'Agentic AI : ils constituent un réservoir
+de solutions formelles et éprouvées capable de combler ses faiblesses actuelles
+en matière de stabilité, de gouvernance et d'explicabilité.''}
+\smallskip}}
+\medskip
+
+\begin{table}[H]
+\centering
+\caption{Divergences structurelles SMA vs Agentic AI}
+\label{tab:divergences}
+\begin{tabularx}{\textwidth}{L{3cm}L{5.5cm}L{4.5cm}}
+\toprule
+\textbf{Critère} & \textbf{SMA classiques} & \textbf{Agentic AI} \\
+\midrule
+Raisonnement & Logique, déterministe, prouvé & Probabiliste (LLM) \\
+Coordination & Protocoles formels (ACL, Contract Net) & Prompt engineering \\
+Apprentissage & Optionnel (MARL) & Central et indispensable \\
+Maturité & Décennies, bases mathématiques & Écosystème fragmenté \\
+Explicabilité & Règles traçables & Déficit inhérent aux LLM \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% =============================================================================
+\chapter{Exploration des sujets et choix du scénario}
+\label{chap:sujets}
+% =============================================================================
+
+\section{Sujets envisagés}
+
+\subsection{Scraping et comparateur de prix}
+
+\textbf{Concept :} Agents autonomes parcourant des sites e-commerce, collectant
+des prix et alertant sur les meilleures offres.
+
+\textbf{Architecture SMA envisagée :} Agent Scraper ($\times N$, un par site),
+Agent Normalisateur, Agent Comparateur, Agent Alerteur.
+
+\textbf{Pourquoi non retenu :} La valeur ajoutée du LLM est marginale --- la
+comparaison de prix est un problème algorithmique pur. Le pipeline est trop linéaire
+pour justifier des patterns SMA complexes. Il manque la dimension cognitive de
+l'Agentic AI.
+
+\subsection{Assistant de veille technologique}
+
+\textbf{Concept :} Agents spécialisés par domaine (IA, cybersécurité, cloud) qui
+agrègent, filtrent et synthétisent des informations depuis RSS, arXiv, GitHub Trending.
+
+\textbf{Pourquoi non retenu :} Périmètre difficile à délimiter. L'évaluation
+qualitative des résultats est subjective. L'encadrant a orienté vers un sujet avec
+des métriques plus objectives.
+
+\subsection{Système de recommandation personnalisée}
+
+\textbf{Concept :} Plusieurs agents modélisant différents aspects du profil
+utilisateur (historique, préférences, comportement), convergeant par vote pondéré.
+
+\textbf{Pourquoi non retenu :} Nécessite des données utilisateur historiques
+difficiles à simuler de façon réaliste. Les métriques de qualité demandent un jeu
+de données conséquent.
+
+\section{Le rôle de l'encadrant dans le choix final}
+
+Lors d'une séance de suivi, \textbf{M. Seriai} a proposé le sujet du recrutement
+automatisé. Cette suggestion a immédiatement convergé les réflexions :
+
+\begin{enumerate}
+  \item Le recrutement est un \textbf{pipeline naturellement multi-étapes} : analyser,
+        chercher, filtrer, évaluer, vérifier, contacter. Chaque étape = un agent avec
+        une responsabilité unique (principe SRP appliqué aux agents).
+  \item Le \textbf{HITL y est parfaitement naturel} : décider de contacter un candidat
+        est une décision à forte valeur humaine.
+  \item Le \textbf{RAG est démontrable} : les profils invalides récurrents entre runs
+        justifient une blacklist inter-runs avec valeur mesurable.
+  \item Les \textbf{métriques sont objectives} : scores de matching, durée de run.
+\end{enumerate}
+
+\section{Critères de décision comparés}
+
+\begin{table}[H]
+\centering
+\caption{Comparaison des sujets envisagés}
+\label{tab:sujets}
+\begin{tabularx}{\textwidth}{L{3.5cm}C{2cm}C{2cm}C{2cm}C{2cm}}
+\toprule
+\textbf{Critère} & \textbf{Prix} & \textbf{Veille} & \textbf{Reco.} & \textbf{Recrutement} \\
+\midrule
+Réalisme professionnel & Moyen & Élevé & Moyen & \textbf{Très élevé} \\
+Complexité SMA justifiée & Faible & Moyen & Moyen & \textbf{Élevée} \\
+HITL naturel & Non & Non & Non & \textbf{Oui} \\
+RAG démontrable & Non & Oui & Oui & \textbf{Oui} \\
+Métriques objectives & Oui & Non & Oui & \textbf{Oui} \\
+Faisabilité gratuite & Oui & Oui & Non & \textbf{Oui} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% =============================================================================
+\chapter{Conception et architecture du prototype}
+\label{chap:conception}
+% =============================================================================
+
+\section{Vision générale}
+
+Le système automatise le sourcing de candidats à partir d'une fiche de poste en
+langage naturel. L'entrée est une chaîne de caractères (ex : \textit{``Développeur
+Python senior, 5 ans, Paris, FastAPI, LangGraph, Docker, RAG''}). La sortie est un
+rapport structuré avec candidats classés par score (0--100), statut de validation,
+liens de profils et messages de contact personnalisés.
+
+\section{Schéma logique du pipeline}
+
+\begin{figure}[H]
+\centering
+\begin{tabularx}{\textwidth}{X}
+\toprule
+\textbf{Pipeline multi-agents LangGraph} \\
+\midrule
+\texttt{START} $\to$ \textbf{A1 Orchestrateur} $\to$ \textbf{A2 Analyste}
+$\to$ \textbf{A3a Stratège} \\
+$\to$ \textbf{A3b Collecteur} \textit{(DuckDuckGo + GitHub API + Stack Overflow)} \\
+$\to$ \textbf{A3c Filtre} \textit{(30+ domaines agrégateurs, 50+ keywords, blacklist RAG)} \\
+$\to$ \textbf{A6 Déduplicateur} \\
+$\xrightarrow{\text{Send()}\times N}$ \textbf{A4 Évaluateur} \textit{(Groq LLM, cache RAG)} $\to$ \texttt{reduce\_scores} \\
+$\xrightarrow{\text{Send()}\times N}$ \textbf{A5 Vérificateur} \textit{(LLM + guards déterministes)} $\to$ \texttt{reduce\_validations} \\
+$\to$ \textbf{Injection RAG} \textit{(ChromaDB, cosine $\geq 0.75$, récents $\leq 30$ jours)} \\
+$\xrightarrow{\text{conditionnel}}$ \textbf{A7 Recruteur} $\to$ \textbf{Rapport} $\to$ \textbf{A8 Persistance} $\to$ \texttt{END} \\
+\bottomrule
+\end{tabularx}
+\caption{Architecture logique du pipeline multi-agents}
+\label{fig:pipeline}
+\end{figure}
+
+\section{Le blackboard : cœur formel du SMA}
+
+Le fichier \texttt{src/state.py} définit le blackboard, pierre angulaire de
+l'architecture SMA. C'est un \texttt{TypedDict} partagé entre tous les agents, avec
+une \textbf{convention d'écriture stricte} : chaque agent possède ses champs dédiés.
+
+\begin{lstlisting}[caption={src/state.py --- Blackboard TypedDict avec reducers}]
+class GraphState(TypedDict):
+    fiche_poste: str                    # Input entreprise
+    profil_competences: dict            # A2 ecrit, lu par A3a, A4
+    requetes_recherche: dict            # A3a ecrit, lu par A3b
+    resultats_bruts: list[dict]         # A3b ecrit, lu par A3c
+    # Annotated + operator.add = reducer pour fan-out parallele
+    profils_bruts: Annotated[list[Candidat], operator.add]
+    profils_dedupliques: list[Candidat] # A6 ecrit, lu par A4(xN)
+    candidats_scores: Annotated[list[CandidatScore], operator.add]
+    candidats_valides: Annotated[list[CandidatValide], operator.add]
+    messages_envoyes: Annotated[list[dict], operator.add]
+    rapport_final: str                  # A1 ecrit en dernier
+\end{lstlisting}
+
+Les champs \texttt{Annotated[list, operator.add]} sont des \textbf{reducers} :
+lors du fan-out \texttt{Send()}, N instances écrivent simultanément dans ces listes
+et LangGraph les fusionne automatiquement, sans verrou explicite. C'est le pattern
+\textbf{Map-Reduce} appliqué à un SMA.
+
+\section{Construction du graphe}
+
+\begin{lstlisting}[caption={src/graph.py --- Fan-out et HITL}]
+def route_to_evaluateurs(state: GraphState) -> list[Send]:
+    """Fan-out : 1 instance A4 par profil, execution parallele."""
+    return [
+        Send("evaluateur", {
+            "candidat": candidat,
+            "profil_competences": state["profil_competences"],
+        })
+        for candidat in profils[:MAX_PROFILS_PARALLELES]
+    ]
+
+# Compilation avec HITL
+app = graph.compile(
+    checkpointer=MemorySaver(),
+    interrupt_before=["recruteur"]   # pause avant A7
+)
+\end{lstlisting}
+
+\section{Feature model --- Variabilité architecturale}
+
+\begin{figure}[H]
+\centering
+\begin{tabularx}{\textwidth}{L{3.2cm}C{1.5cm}L{8cm}}
+\toprule
+\textbf{Feature} & \textbf{Type} & \textbf{Variantes} \\
+\midrule
+\rowcolor{lightblue}
+\textbf{SMA Recrutement} & racine & --- \\
+Mode d'exécution & XOR & \textbf{Local} (monolithique, LangGraph) $|$ \textbf{Microservices} (Docker) \\
+Fournisseur LLM & mand. & \textbf{Groq} (\texttt{llama-3.3-70b-versatile}) [extensible] \\
+HITL & XOR & \textbf{Activé} \texttt{interrupt\_before=["recruteur"]} $|$ \textbf{Désactivé} \\
+Interface & OR & \textbf{CLI} $|$ \textbf{API REST} $|$ \textbf{UI Web} \\
+Mémoire RAG & AND & \textbf{Blacklist} inter-runs $+$ \textbf{Cache} de scores \\
+\bottomrule
+\multicolumn{3}{l}{\scriptsize mand.~= mandatoire \quad XOR~= alternatif exclusif \quad OR~= un ou plusieurs \quad AND~= tous obligatoires}
+\end{tabularx}
+\caption{Feature model du système de recrutement multi-agents}
+\label{fig:featuremodel}
+\end{figure}
+
+\section{Patterns SMA implémentés}
+
+\begin{table}[H]
+\centering
+\caption{Patterns SMA implémentés dans le prototype}
+\label{tab:patterns}
+\begin{tabularx}{\textwidth}{L{3.5cm}L{4cm}L{6cm}}
+\toprule
+\textbf{Pattern SMA} & \textbf{Implémentation} & \textbf{Justification} \\
+\midrule
+Superviseur & A1 via flux du graphe & Topologie étoile, délégation formelle \\
+Blackboard & \texttt{GraphState} TypedDict & État partagé, droits séparés par agent \\
+Send / Map-Reduce & A4+A5 via \texttt{Send()} & $N$ instances parallèles \\
+Validation pair-à-pair & A4 score $\to$ A5 contrôle & Séparation évaluation/vérification \\
+Routage conditionnel & \texttt{route\_apres\_verification()} & Décision sur meilleur score \\
+Human-in-the-Loop & \texttt{interrupt\_before=["recruteur"]} & Suspension pour validation \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Justification des choix technologiques}
+
+\begin{table}[H]
+\centering
+\caption{Justification des choix technologiques}
+\label{tab:technos}
+\begin{tabularx}{\textwidth}{L{2.5cm}L{2.5cm}L{8cm}}
+\toprule
+\textbf{Techno} & \textbf{Alternative} & \textbf{Justification} \\
+\midrule
+LangGraph & CrewAI, AutoGen & Graphe = SMA formel, état riche, fan-out, HITL natif, pas de vendor lock-in \\
+Groq (cloud) & Ollama (local) & Ollama crashait la machine (8~Go RAM), Groq free tier 100k tok/jour \\
+ChromaDB & Pinecone & Local, gratuit, sans serveur externe \\
+FastAPI & Flask & Async natif, SSE simplifié, swagger auto-généré \\
+DuckDuckGo & SerpAPI & Gratuit, sans clé API \\
+LangGraph & Kafka & LangGraph \textit{est} le bus : arête = canal, state = message \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% =============================================================================
+\chapter{Implémentation détaillée}
+\label{chap:impl}
+% =============================================================================
+
+\section{Structure du projet}
+
+\begin{description}[font=\ttfamily]
+  \item[src/agents/] 8 agents + nœud injection RAG ($\sim$1\,400 lignes)
+  \item[src/tools/] RAG, scraping, recherche DDG, GitHub API, Stack Overflow API
+  \item[src/ui/] Interface NiceGUI (3 fichiers : app, layout, api\_client)
+  \item[src/api.py] API Gateway FastAPI + SSE + SQLite ($\sim$500 lignes)
+  \item[src/graph.py] Construction du graphe LangGraph
+  \item[src/state.py] Blackboard TypedDict avec reducers
+  \item[src/config.py] Configuration + \texttt{get\_llm()} avec retry
+  \item[src/prompts.py] 4 prompts système centralisés
+  \item[src/observabilite.py] Métriques par nœud, export JSON
+  \item[services/] 6 microservices HTTP FastAPI (mode Docker)
+  \item[tests/] 91 tests automatisés
+\end{description}
+
+\section{Les huit agents}
+
+\subsection{A1 --- Orchestrateur (Superviseur)}
+
+Point d'entrée et sortie du pipeline. Initialise le run, produit le rapport final
+Markdown. Implémente le pattern Superviseur : délégation formelle via le flux du
+graphe.
+
+\subsection{A2 --- Analyste de poste}
+
+Transforme la fiche de poste en JSON structuré via Groq. Prompt system avec
+règle explicite : \textit{``AWS, GCP, Azure ne sont PAS des villes.''} (bug
+identifié et corrigé en production). Enrichissement déterministe : fonction
+\texttt{\_inferer\_niveau\_experience()} avec regex pour les patterns alternance,
+stage, junior, senior.
+
+\textbf{Exemple d'entrée/sortie :}
+
+\medskip
+\begin{tabularx}{\textwidth}{L{5.5cm}L{8cm}}
+\textit{Entrée :} \texttt{"Développeur Python senior, 5 ans, Paris, FastAPI, LangGraph"} &
+\textit{Sortie JSON :} \texttt{\{"hard\_skills": ["Python","FastAPI","LangGraph"], "niveau\_experience": "senior", "experience\_min": 5, "localisations": ["Paris"]\}} \\
+\end{tabularx}
+
+\subsection{A3 --- Division en trois sous-agents}
+
+L'agent collecteur initial a été \textbf{refactorisé en A3a/A3b/A3c} lors d'une
+itération architecturale, car la responsabilité unique était violée.
+
+\paragraph{A3a --- Stratège.} Génère un plan de recherche par source via LLM.
+Opérateurs déterministes : \texttt{site:linkedin.com/in/}, \texttt{language:python
+followers:>5}.
+
+\paragraph{A3b --- Collecteur.} Exécute le plan : DuckDuckGo, GitHub API officielle,
+Stack Overflow API. Délai 1,5~s entre appels DDG (rate limit). Déduplication par URL.
+
+\paragraph{A3c --- Filtre anti-bruit.} Filtre algorithmique pur en 4 passes :
+
+\begin{lstlisting}[caption={src/agents/chercheur\_filtre.py --- Blacklist RAG}]
+# Passe 3 : blacklist RAG (avant scraping = avant depenser des appels)
+if _memoire is not None and _memoire.est_blackliste(url):
+    n_blacklist_drop += 1
+    continue  # URL invalide connue, skip immediat
+
+# Passe 4 : post-filtre apres scraping
+if _is_noise_text(profil_brut) or _is_aggregated_profile(title, profil_brut):
+    n_post_drop += 1
+    continue
+\end{lstlisting}
+
+\textbf{Résultats sur le run de référence :} 46 hits bruts $\to$ 13 après filtrage
+(taux de bruit : 68\,\%).
+
+\subsection{A6 --- Déduplicateur}
+
+Fusionne les profils identiques par URL ou similarité de nom ($>85\,\%$ via
+\texttt{SequenceMatcher}). En cas de fusion, les \texttt{profil\_brut} sont
+concaténés pour maximiser l'information disponible à A4.
+
+\subsection{A4 --- Évaluateur ($\times N$ parallèles, avec cache RAG)}
+
+Évalue UN candidat par rapport au profil de compétences. Barème strict dans le
+prompt : 85--100 (excellent), 70--84 (bon), 50--69 (intéressant), 30--49 (partiel),
+0--29 (hors sujet). Cache RAG avant appel LLM :
+
+\begin{lstlisting}[caption={src/agents/evaluateur.py --- Cache RAG}]
+cache = get_memoire().get_score_cache(url, fiche_poste)
+if cache is not None:
+    # Score reutilise sans appel LLM => economie 1 appel Groq
+    return {"candidats_scores": [CandidatScore(score_global=cache["score"])]}
+\end{lstlisting}
+
+\subsection{A5 --- Vérificateur ($\times N$ parallèles) --- La pièce de résistance}
+
+Validation pair-à-pair en deux couches combinées :
+
+\textbf{Couche LLM :} contrôle la cohérence sémantique du score A4, détecte les
+incohérences, valide/invalide/doute.
+
+\textbf{Guards déterministes :}
+
+\begin{lstlisting}[caption={src/agents/verificateur.py --- Guards anti-faux positifs}]
+# Guard 1 : page non-candidat (offre emploi, formation, article...)
+if _profil_non_candidat(nom, profil_brut, url):
+    score_final = min(score_final, 20.0)
+    statut = "invalide"
+
+# Guard 2 : adequation minimale (hard skills visibles dans le texte)
+ok, raison = _adequation_minimale(profil_requis, nom, profil_brut)
+if not ok:
+    score_final = min(score_final, 45.0); statut = "invalide"
+
+# Guard 3 : experience incompatible (senior pour un poste junior, etc.)
+incompatible, raison = _experience_incompatible(profil_brut, niveau_requis)
+if incompatible:
+    score_final = min(score_final, 45.0); statut = "invalide"
+
+# Guard 4 : upgrade LinkedIn (scraping bloque, si score A4 >= 75 on fait confiance)
+if statut == "douteux" and score_a4 >= SCORE_SEUIL_CONTACT and "/in/" in url:
+    statut = "valide"  # LinkedIn bloque le scraping : A5 voit trop peu de contenu
+\end{lstlisting}
+
+Sur le run de référence, \textbf{3 candidats valides sur 5} ont bénéficié de
+l'upgrade automatique LinkedIn.
+
+\subsection{Nœud Injection RAG}
+
+Après la réduction des validations A5, enrichit les résultats avec des candidats
+connus des runs précédents pour une fiche similaire (similarité cosine $\geq 0.75$,
+$\leq 30$ jours). Anti-doublon par URL.
+
+\subsection{A7 --- Recruteur}
+
+Rédige des messages de contact personnalisés (max 150 mots). Mode absolu : score
+$\geq 75$. Mode relatif : top-3 parmi les viables si aucun n'atteint le seuil.
+
+\subsection{A8 --- Persistance RAG}
+
+Nœud terminal. Stratégie de persistance :
+\begin{itemize}[noitemsep]
+  \item \texttt{"valide"} $\to$ cache de score pour runs futurs (A4)
+  \item \texttt{"invalide"} $\to$ blacklist inter-runs (A3c)
+  \item \texttt{"douteux"} $\to$ \textbf{non persisté} (incertitude trop élevée)
+\end{itemize}
+
+Règle : le statut ``invalide'' (rejet HITL) l'emporte sur ``valide'' lors de la
+déduplication par \texttt{candidat\_id}.
+
+\section{Architecture de la mémoire RAG}
+
+ChromaDB local (\texttt{./data/chromadb/}) + SentenceTransformers
+(\texttt{all-MiniLM-L6-v2}, $\sim$80~Mo). Deux collections :
+
+\begin{itemize}
+  \item \texttt{fiches\_poste} : embeddings des fiches, id = hash SHA1.
+  \item \texttt{candidats\_evalues} : profils + métadonnées (score, statut, url,
+        fiche\_id, last\_seen).
+\end{itemize}
+
+Le \texttt{fiche\_id} rattache chaque candidat à la fiche pour laquelle il a été
+évalué : sans ce lien, un candidat Python serait biaisé pour un poste Java.
+
+\medskip
+\colorbox{lightblue}{\parbox{0.95\textwidth}{\smallskip
+\textbf{\color{primary}Propriété d'apprentissage cumulatif}\\
+Le système accumule de la connaissance opérationnelle sans modifier les poids du
+modèle. Chaque run enrichit la base et rend les suivants plus rapides et plus précis.
+Sur le Run~2 d'une même fiche : gain estimé de 30--40\,\% de durée (blacklist +
+cache + injection).
+\smallskip}}
+
+\section{Human-in-the-Loop}
+
+L'API expose trois actions via \texttt{POST /runs/\{id\}/hitl} :
+\begin{description}[noitemsep]
+  \item[\texttt{approve}] Reprend le pipeline tel quel.
+  \item[\texttt{skip}] Invalide tous les candidats (mémorisé en RAG via A8).
+  \item[\texttt{edit}] Remplace la liste de candidats par une version JSON éditée.
+\end{description}
+
+\section{Mode microservices}
+
+\begin{table}[H]
+\centering
+\caption{Services Docker du mode microservices}
+\label{tab:microservices}
+\begin{tabularx}{\textwidth}{L{3.5cm}C{1.8cm}L{7.5cm}}
+\toprule
+\textbf{Service} & \textbf{Port} & \textbf{Rôle} \\
+\midrule
+\texttt{svc-analyste} & 8001 & A2 : analyse fiche de poste \\
+\texttt{svc-chercheur} & 8002 & A3a/b/c : collecte + blacklist RAG \\
+\texttt{svc-evaluateur} & 8003 & A4 : scoring + cache RAG \\
+\texttt{svc-verificateur} & 8004 & A5 : vérification + guards déterministes \\
+\texttt{svc-recruteur} & 8005 & A7 : rédaction messages \\
+\texttt{svc-orchestrateur} & 8006 & Orchestration HTTP (remplace LangGraph) \\
+\texttt{api-gateway} & 8000 & Point d'entrée public FastAPI \\
+\texttt{sma-ui} & 8080 & Interface NiceGUI \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Trade-offs monolithique vs microservices}
+\label{tab:tradeoffs}
+\begin{tabularx}{\textwidth}{L{3cm}L{5.5cm}L{5cm}}
+\toprule
+\textbf{Critère} & \textbf{Monolithique (LangGraph)} & \textbf{Microservices (Docker)} \\
+\midrule
+Latence & Optimale (in-process) & +30--50\,\% (HTTP) \\
+Déployabilité & 1 processus & Cloud-ready \\
+Scaling & Vertical & Horizontal par service \\
+Débogage & Traces LangGraph & Logs distribués \\
+RAG & Blacklist + cache + injection & Blacklist + cache \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Tests automatisés}
+
+\begin{table}[H]
+\centering
+\caption{Couverture des 91 tests}
+\label{tab:tests}
+\begin{tabularx}{\textwidth}{L{6cm}C{1.8cm}L{6cm}}
+\toprule
+\textbf{Fichier} & \textbf{Tests} & \textbf{Couverture} \\
+\midrule
+\texttt{test\_graph.py} & 28 & Topologie, 16 nœuds, arêtes \\
+\texttt{test\_verificateur\_rules.py} & 5 & Guards déterministes A5 \\
+\texttt{test\_stratege\_queries.py} & 15 & Requêtes A3a \\
+\texttt{test\_api.py} & 43 & Endpoints, HITL, SQLite \\
+\midrule
+\textbf{Total} & \textbf{91} & \textbf{91/91 passent} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% =============================================================================
+\chapter{Évaluation et résultats}
+\label{chap:eval}
+% =============================================================================
+
+\section{Run de référence}
+
+Fiche : \textit{``Développeur Python senior, 5~ans, Paris ou remote, FastAPI,
+LangGraph, Docker, RAG''} (21 mai 2026, \texttt{llama-3.3-70b-versatile}).
+
+\begin{table}[H]
+\centering
+\caption{Métriques du run de référence}
+\label{tab:metriques}
+\begin{tabularx}{\textwidth}{L{5.5cm}C{2.5cm}L{5cm}}
+\toprule
+\textbf{Étape} & \textbf{Valeur} & \textbf{Commentaire} \\
+\midrule
+Profils bruts collectés (A3b) & 46 & DDG + GitHub + SO \\
+Après filtrage A3c & 13 & Taux de bruit : 68\,\% \\
+Après déduplication A6 & 12 & 1 doublon nom \\
+Candidats évalués A4 & 10 & Limite MAX\_PROFILS=10 \\
+Candidats valides A5 & 5 & Dont 3 upgrades LinkedIn \\
+Messages rédigés A7 & 2 & Mode absolu (score $\geq 75$) \\
+\textbf{Durée totale} & \textbf{173~s} & 10 appels LLM parallèles \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Meilleurs candidats identifiés}
+\label{tab:candidats}
+\begin{tabularx}{\textwidth}{L{4cm}C{1.5cm}C{2cm}L{5.5cm}}
+\toprule
+\textbf{Candidat} & \textbf{Score} & \textbf{Source} & \textbf{Remarques A5} \\
+\midrule
+Srikanth Vanjre & 88 & LinkedIn & Senior Backend AI/RAG --- excellent \\
+Shubhangi Gaur & 80 & LinkedIn & Python/FastAPI senior \\
+Nikita Koznev & 72 & LinkedIn & Python senior (upgrade auto) \\
+Jyotsna Konchada & 68 & LinkedIn & Backend Python (upgrade auto) \\
+Vamshi Krishna & 68 & LinkedIn & Full Stack Python (upgrade auto) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Apport du RAG sur les runs répétés}
+
+\medskip
+\colorbox{lightblue}{\parbox{0.95\textwidth}{\smallskip
+\textbf{\color{primary}Comparaison Run~1 vs Run~2 --- même fiche de poste}\\[4pt]
+\textbf{Run~1 (base RAG vide) :} 0 URL blacklistée, 0 injection, durée 173~s.\\[3pt]
+\textbf{Run~2 (base RAG peuplée) :}
+Les profils SO invalides (Jon Skeet C\#, VonC...) sont filtrés \textit{avant
+scraping} par A3c : économie de 3 scrapings + 3 appels A4 + 3 appels A5.
+Les 5 candidats valides du Run~1 sont réinjectés automatiquement.
+Gain estimé : $-$6 appels Groq, durée réduite de 30--40\,\%.
+\smallskip}}
+\medskip
+
+\section{Analyse critique}
+
+\paragraph{Points forts.}
+Architecture formellement fondée (6 patterns SMA), guards déterministes, RAG cumulatif
+inter-runs, observabilité structurée, dual mode (monolithique + microservices), 91 tests.
+
+\paragraph{Limites assumées.}
+Scraping LinkedIn bloqué à 100\,\% (upgrade A5 comme palliatif) ; quota Groq
+100k~tokens/jour ($\sim$3--5 runs complets) ; calibration empirique des seuils
+RAG (0,75/0,85) sur un faible nombre de runs ; injection RAG absente en mode
+microservices (blacklist et cache seuls actifs).
+
+% =============================================================================
+\chapter{Conclusion et perspectives}
+\label{chap:conclusion}
+% =============================================================================
+
+\section{Bilan}
+
+Ce TER a atteint les trois objectifs assignés :
+
+\begin{enumerate}
+  \item \textbf{État de l'art structuré} : 17 articles analysés, 4 documents de
+        synthèse produits, comparaison de 5 frameworks, trajectoire évolutive
+        identifiée (GenAI $\to$ Communautés agentiques).
+  \item \textbf{Feature model} : variabilité en 5 dimensions formalisée, décisions
+        architecturales justifiées par des contraintes métier mesurables.
+  \item \textbf{Prototype opérationnel} : 8 agents LangGraph, RAG inter-runs
+        (blacklist + cache + injection), HITL, microservices Docker, API SSE,
+        UI NiceGUI, 91 tests --- $\sim$173~s end-to-end.
+\end{enumerate}
+
+Ce prototype démontre empiriquement que l'Agentic AI, structurée par les patterns
+formels des SMA (blackboard, superviseur, map-reduce, validation pair-à-pair),
+produit un système fiable, traçable et évolutif --- ce que les implémentations naïves
+de LLM enchaînés ne garantissent pas.
+
+\section{Réflexion critique sur l'Agentic AI}
+
+Ce projet confirme les conclusions de notre analyse comparative : \textbf{l'Agentic
+AI sans structuration SMA est fragile}. Les premières versions du prototype produisaient
+des résultats incohérents. L'ajout progressif de patterns formels SMA a drastiquement
+amélioré la fiabilité.
+
+L'Agentic AI excelle pour les tâches cognitives (analyse sémantique, génération
+naturelle). Elle échoue pour les tâches binaires précises (est-ce une offre
+d'emploi ?). La solution : la compléter avec des algorithmes déterministes pour
+les tâches où la précision prime sur la flexibilité --- c'est le paradigme
+neuro-symbolique hybride identifié dans les études.
+
+\section{Perspectives}
+
+\paragraph{Kubernetes.}
+Chaque service est sans état local (state dans ChromaDB et SQLite). Le scaling
+horizontal d'A4 et A5 est directement applicable.
+
+\paragraph{API LinkedIn officielle.}
+Éliminerait la limitation principale et améliorerait significativement la précision
+des scores.
+
+\paragraph{MARL pour l'amélioration continue.}
+Les agents A3a (Stratège) pourraient adapter leurs requêtes selon les scores
+obtenus --- un apprentissage au sens strict.
+
+\paragraph{Gouvernance et traçabilité.}
+Un registre de décisions (quel agent, quelle confiance) adresserait les enjeux
+de gouvernance identifiés par Milosevic et Rabhi (2026).
+
+% =============================================================================
+\chapter*{Références bibliographiques}
+\addcontentsline{toc}{chapter}{Références bibliographiques}
+% =============================================================================
+
+\begin{description}[leftmargin=0pt, itemsep=4pt]
+
+\item \textbf{Études SMA}
+
+\item Dorri, A., Kanhere, S., Jurdak, R. (2018). \textit{Multi-Agent Systems: A Survey}. IEEE Access, 6, 28573--28593.
+
+\item Maldonado, J. et al. (2024). \textit{Architectures and Coordination Patterns in Multi-Agent Systems}. Journal of AI Research, 79.
+
+\item Nguyen, T. et al. (2019). \textit{Deep Reinforcement Learning for Multi-Agent Systems}. IEEE Transactions on Cybernetics, 50(9), 3826--3839.
+
+\item General Survey (2020). \textit{A General Survey on Multi-Agent Coordination Mechanisms}. ACM Computing Surveys.
+
+\item Gronauer, S., Diepold, K. (2021). \textit{Multi-Agent Deep Reinforcement Learning: A Survey}. AI Review, 55, 895--943.
+
+\item Wang, J. et al. (2024). \textit{Multi-Agent Systems in Industry 4.0}. WJARR.
+
+\medskip
+\item \textbf{Études Agentic AI}
+
+\item Wavestone (2024). \textit{Agentic AI Playbook --- Architecture Patterns for Enterprise Systems}.
+
+\item Abou Ali, H. et al. (2026). \textit{Symbolic vs Neural Paradigms in Agentic AI Systems}. Expert Systems with Applications.
+
+\item Alva, R., Pandey, S. (2024). \textit{Modular Architecture for LLM-Based Agentic Systems}. arXiv.
+
+\item Sapkota, B. et al. (2024). \textit{AI Agents vs. Agentic AI: A Conceptual Taxonomy}. arXiv.
+
+\item Patel, N. et al. (2025). \textit{Security Risks in LLM-Based Agentic Systems}. ACM CCS.
+
+\item Hughes, A. et al. (2025). \textit{Safety and Alignment Challenges in Autonomous AI Agents}. Nature MI.
+
+\item Vaidhyanathan, K., Taibi, D. (2026). \textit{Framework Comparison for Agentic AI}. Software: Practice \& Experience, 56(3).
+
+\item TOSEM (2024). \textit{A Year in TOSEM --- SE4AI and AI4SE}.
+
+\item Milosevic, D., Rabhi, F. (2026). \textit{Agentic Communities: Governance and Human-AI Collaboration}. IEEE Software.
+
+\item Schneider, J. (2025). \textit{Agentic AI: Toward Goal-Directed Autonomous Systems}. IEEE Intelligent Systems.
+
+\item Pati, S. et al. (2025). \textit{Agentic AI Paradigm: Planning, Memory and Adaptation}. AI Magazine.
+
+\medskip
+\item \textbf{Documents produits}
+
+\item Dzermane, S. (2025). \textit{Synthèse Générale --- SMA et Éléments Connexes}. TER M1, Université de Montpellier.
+
+\item Dzermane, S. (2025). \textit{Synthèse Générale --- Agentic AI et Éléments Connexes}. TER M1.
+
+\item Dzermane, S. (2025). \textit{Analyse Comparative --- Agentic AI et Systèmes Multi-Agents}. TER M1.
+
+\item Dzermane, S. (2025). \textit{Glossaire des concepts --- Comparaison des frameworks Agentic AI}. TER M1.
+
+\end{description}
+
+\end{document}

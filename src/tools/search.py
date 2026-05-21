@@ -8,7 +8,6 @@ Deux niveaux d'API :
       conservés pour compatibilité si un agent veut utiliser bind_tools.
 """
 
-from langchain_classic.tools import tool
 from ddgs import DDGS
 
 
@@ -90,7 +89,6 @@ def _ddg_search_raw(
     return hits
 
 
-@tool
 def recherche_profils(query: str) -> str:
     """Recherche des profils de candidats sur le web via DuckDuckGo.
 
@@ -106,7 +104,6 @@ def recherche_profils(query: str) -> str:
     )
 
 
-@tool
 def recherche_linkedin(query: str) -> str:
     """Recherche des profils LinkedIn via DuckDuckGo.
 
@@ -122,7 +119,6 @@ def recherche_linkedin(query: str) -> str:
     )
 
 
-@tool
 def recherche_github(query: str) -> str:
     """Recherche des profils GitHub via DuckDuckGo.
 

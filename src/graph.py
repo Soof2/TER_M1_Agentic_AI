@@ -44,6 +44,7 @@ from src.agents.evaluateur import evaluateur_node
 from src.agents.verificateur import verificateur_node
 from src.agents.recruteur import recruteur_node
 from src.agents.persistance import persistance_node
+from src.agents.injection_rag import injection_rag_node
 
 
 def route_to_evaluateurs(state: GraphState) -> list[Send]:
@@ -167,6 +168,7 @@ def build_graph(with_interrupt: bool = True) -> StateGraph:
     graph.add_node("reduce_scores", reduce_scores_node)
     graph.add_node("verificateur", verificateur_node)
     graph.add_node("reduce_validations", reduce_validations_node)
+    graph.add_node("injection_rag", injection_rag_node)
     graph.add_node("recruteur", recruteur_node)
     graph.add_node("rapport", rapport_node)
     graph.add_node("persistance", persistance_node)  # A8 — mémoire RAG
@@ -201,9 +203,12 @@ def build_graph(with_interrupt: bool = True) -> StateGraph:
     # --- Fan-in : vérificateur → reduce_validations ---
     graph.add_edge("verificateur", "reduce_validations")
 
-    # --- Routage conditionnel après vérification ---
+    # --- Injection RAG : candidats connus des runs précédents ---
+    graph.add_edge("reduce_validations", "injection_rag")
+
+    # --- Routage conditionnel après vérification + injection ---
     graph.add_conditional_edges(
-        "reduce_validations",
+        "injection_rag",
         route_apres_verification,
         {
             "recruteur": "recruteur",

@@ -9,7 +9,6 @@ Deux niveaux d'API :
 
 import requests
 from bs4 import BeautifulSoup
-from langchain_classic.tools import tool
 
 
 def extraire_page_web_raw(url: str, max_chars: int = 3000) -> str:
@@ -46,7 +45,6 @@ def extraire_page_web_raw(url: str, max_chars: int = 3000) -> str:
         return f"Erreur d'extraction: {e}"
 
 
-@tool
 def extraire_page_web(url: str) -> str:
     """Extrait le texte principal d'une page web (profil candidat, page GitHub, etc.).
 

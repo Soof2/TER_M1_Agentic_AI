@@ -38,7 +38,7 @@ def persistance_node(state: GraphState) -> dict:
 
     try:
         memoire = get_memoire()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         _log.warning("Mémoire RAG indisponible, persistance ignorée : %s", exc)
         m.fin("A8_persistance", n_persistes=0, rag_error=str(exc)[:200])
         return {}
@@ -48,7 +48,7 @@ def persistance_node(state: GraphState) -> dict:
         fiche_id = memoire.ajouter_fiche_poste(fiche_poste)
         if fiche_id:
             _log.info("Fiche de poste persistée (fiche_id=%s).", fiche_id)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         _log.warning("Erreur persistance fiche RAG, persistance ignorée : %s", exc)
         m.fin("A8_persistance", n_persistes=0, rag_error=str(exc)[:200])
         return {}
@@ -56,12 +56,24 @@ def persistance_node(state: GraphState) -> dict:
     # Index profils bruts par ID pour récupérer le texte
     profils_idx = {p["id"]: p for p in profils_dedupliques}
 
+    # Dédup par candidat_id : si le même candidat apparaît deux fois
+    # (ex: version "valide" initiale + version "invalide" après HITL skip),
+    # le statut invalide l'emporte.
+    seen: dict[str, dict] = {}
+    for c in candidats_valides:
+        cid = c["candidat_id"]
+        if cid not in seen or c.get("statut") == "invalide":
+            seen[cid] = c
+    candidats_a_persister = list(seen.values())
+
     n_persistes = 0
 
-    for candidat in candidats_valides:
-        # Ne persister que les profils réellement validés. Les douteux restent
-        # visibles dans le rapport mais ne doivent pas calibrer les runs futurs.
-        if candidat.get("statut") != "valide":
+    for candidat in candidats_a_persister:
+        # On persiste tous les statuts :
+        # - "valide"   → cache de score pour runs futurs sur poste similaire
+        # - "invalide" → blacklist inter-runs (évite de re-scraper + re-évaluer)
+        # - "douteux"  → ignoré (incertitude trop élevée pour servir de référence)
+        if candidat.get("statut") == "douteux":
             continue
 
         profil = profils_idx.get(candidat["candidat_id"], {})
@@ -77,9 +89,11 @@ def persistance_node(state: GraphState) -> dict:
                 source=source,
                 remarques=candidat.get("remarques", ""),
                 fiche_id=fiche_id,
+                statut=candidat.get("statut", "valide"),
+                url=candidat.get("url") or "",
             )
             n_persistes += 1
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.warning("Erreur persistance candidat %s : %s", candidat.get("nom", "?"), exc)
 
     _log.info(

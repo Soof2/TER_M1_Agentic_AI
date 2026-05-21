@@ -54,6 +54,14 @@ async def list_runs() -> list[dict]:
         return resp.json().get("runs", [])
 
 
+async def cancel_run(run_id: str) -> dict:
+    """POST /runs/{run_id}/cancel — annule un run en cours."""
+    async with httpx.AsyncClient(timeout=_SHORT_TIMEOUT) as client:
+        resp = await client.post(f"{API_URL}/runs/{run_id}/cancel")
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def submit_hitl(
     run_id: str,
     action: str,

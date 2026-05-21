@@ -35,18 +35,25 @@ def test_profils_personnes_probables_conserves():
 
 
 def test_adequation_minimale_accepte_profil_tech_avec_competences():
+    # _adequation_minimale ignore les profils < 400 chars (scraping échoué).
+    # On teste avec des profils suffisamment longs pour déclencher l'analyse.
     profil_requis = {"hard_skills": ["Java", "React"], "niveau_experience": "junior"}
-    ok, _ = _adequation_minimale(
-        profil_requis,
-        "Erwann B. - Epitech Student at Epitech Montpellier | LinkedIn",
-        "Étudiant à Epitech Montpellier, projets Java et React.",
+    profil_long_tech = (
+        "Étudiant à Epitech Montpellier, projets Java et React. "
+        "Développeur junior, maîtrise Java Spring et React.js. "
+        "Stage chez une startup, contribution open source. " * 5
     )
+    ok, _ = _adequation_minimale(profil_requis, "Erwann B. - Epitech", profil_long_tech)
     assert ok
 
+    profil_long_hors_sujet = (
+        "Angular vs React : Quel framework front-end choisir ? "
+        "Comparatif des frameworks JavaScript. Tutoriel formation. " * 5
+    )
     ok, _ = _adequation_minimale(
         profil_requis,
         "Angular vs React : Quel framework front-end choisir ?",
-        "",
+        profil_long_hors_sujet,
     )
     assert not ok
 
@@ -57,18 +64,26 @@ def test_adequation_minimale_rejette_personne_hors_poste():
         "niveau_experience": "senior",
     }
 
+    profil_banker_long = (
+        "Senior banker retail construction finance communication. "
+        "Directeur commercial banque immobilier gestion patrimoine. " * 5
+    )
     ok, remarque = _adequation_minimale(
         profil_requis,
         "Fabienne Brandsma - Senior Banker - Retail",
-        "Senior banker retail construction finance communication.",
+        profil_banker_long,
     )
     assert not ok
     assert "Compétences insuffisamment prouvées" in remarque
 
+    profil_dev_long = (
+        "Lead developer Python FastAPI Docker. Architecte logiciel backend. "
+        "Expérience RAG LangChain ChromaDB. Microservices Python senior. " * 5
+    )
     ok, _ = _adequation_minimale(
         profil_requis,
         "Nicolas Bigot - Lead developer, architect - DoYouBuzz",
-        "Lead developer Python FastAPI Docker. Architecte logiciel backend.",
+        profil_dev_long,
     )
     assert ok
 

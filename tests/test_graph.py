@@ -35,9 +35,9 @@ class TestStructureGraphe:
         noeuds = set(app.get_graph().nodes.keys())
         assert "persistance" in noeuds
 
-    def test_14_noeuds_au_total(self, app):
-        # __start__ + 12 nœuds métier + persistance + __end__ = 15
-        assert len(app.get_graph().nodes) == 15
+    def test_noeuds_au_total(self, app):
+        # __start__ + 13 nœuds métier (dont injection_rag) + persistance + __end__ = 16
+        assert len(app.get_graph().nodes) == 16
 
     def test_aretes_pipeline_a3(self, app):
         """A3a -> A3b -> A3c -> deduplicateur."""

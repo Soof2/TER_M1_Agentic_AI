@@ -129,6 +129,27 @@ async def pipeline(body: PipelineRequest):
         erreurs.extend(v for v in valides_raw if v and v.get("_error"))
         candidats_valides = [v for v in valides_raw if v and not v.get("_error")]
 
+        # --- Injection RAG : candidats connus des runs précédents ---
+        try:
+            from src.tools.rag import get_memoire
+            urls_actuels = {c.get("url") for c in candidats_valides if c.get("url")}
+            ids_actuels = {c.get("candidat_id") for c in candidats_valides}
+            connus = get_memoire().get_candidats_connus(body.fiche_poste)
+            for c in connus:
+                if c.get("url") in urls_actuels or c["candidat_id"] in ids_actuels:
+                    continue
+                candidats_valides.append({
+                    "candidat_id": c["candidat_id"],
+                    "nom": c["nom"],
+                    "score_final": c["score"],
+                    "statut": "valide",
+                    "remarques": f"[RAG] Candidat connu (run précédent). {c['remarques'][:120]}".strip(),
+                    "source": c.get("source", ""),
+                    "url": c.get("url") or None,
+                })
+        except Exception:
+            pass
+
         # --- Routage ---
         valides = [c for c in candidats_valides if c.get("statut") == "valide"]
         douteux = [c for c in candidats_valides if c.get("statut") == "douteux"]
@@ -163,6 +184,17 @@ async def pipeline(body: PipelineRequest):
         except Exception as exc:  # noqa: BLE001
             log.exception("Erreur A8 persistance")
             erreurs.append({"_stage": "persistance", "_error": str(exc)})
+
+    # --- A8 : Persistance RAG ---
+    try:
+        from src.agents.persistance import persistance_node
+        persistance_node({
+            "candidats_valides": candidats_valides,
+            "profils_dedupliques": profils,
+            "fiche_poste": body.fiche_poste,
+        })
+    except Exception:
+        pass
 
     return {
         "run_id": run_id,

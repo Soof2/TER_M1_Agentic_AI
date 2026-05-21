@@ -147,6 +147,7 @@ def _internal_run_fields(info: dict) -> dict:
         "_hitl_decision": {},
         "_candidats_pending_hitl": [],
         "_with_interrupt": info.get("_with_interrupt", False),
+        "_cancel_event": threading.Event(),
     }
 
 
@@ -271,12 +272,16 @@ def _run_pipeline(run_id: str, fiche_poste: str, with_interrupt: bool) -> None:
         app_graph = build_graph(with_interrupt=with_interrupt)
         config = {"configurable": {"thread_id": run_id}}
 
+        cancel_event: threading.Event = _runs[run_id]["_cancel_event"]
+
         # --- Première phase : exécution jusqu'à interrupt ou fin ---
         for event in app_graph.stream(
             {"fiche_poste": fiche_poste},
             config=config,
             stream_mode="updates",
         ):
+            if cancel_event.is_set():
+                raise InterruptedError("Run annulé par l'utilisateur.")
             for node_name, payload in event.items():
                 log.info("Run %s : nœud [%s] terminé.", run_id, node_name)
                 _push_event(run_id, "node_completed", {
@@ -332,6 +337,8 @@ def _run_pipeline(run_id: str, fiche_poste: str, with_interrupt: bool) -> None:
 
             # --- Reprise du graphe après la décision ---
             for event in app_graph.stream(None, config=config, stream_mode="updates"):
+                if cancel_event.is_set():
+                    raise InterruptedError("Run annulé par l'utilisateur.")
                 for node_name, payload in event.items():
                     log.info("Run %s : nœud [%s] terminé (post-HITL).", run_id, node_name)
                     _push_event(run_id, "node_completed", {
@@ -357,7 +364,7 @@ def _run_pipeline(run_id: str, fiche_poste: str, with_interrupt: bool) -> None:
         })
         log.info("Run %s : pipeline terminé avec succès.", run_id)
 
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         from src.logger import get_logger
         get_logger("api").exception("Run %s : erreur pipeline.", run_id)
         _runs[run_id].update({
@@ -631,7 +638,7 @@ def _rag_counts() -> dict:
             "fiches_poste": fiches,
             "error": None,
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return {
             "available": False,
             "persist_dir": str(_CHROMA_DIR),
@@ -692,6 +699,7 @@ async def recruter(
         "_hitl_decision": {},
         "_candidats_pending_hitl": [],
         "_with_interrupt": not req.no_interrupt,
+        "_cancel_event": threading.Event(),
     }
     _save_run(run_id)
 
@@ -780,7 +788,7 @@ async def search_rag(
             fiche_poste=fiche_poste,
             n_results=n,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     return JSONResponse({"results": results, "total": len(results)})
@@ -879,3 +887,24 @@ async def submit_hitl(run_id: str, decision: HitlDecision) -> JSONResponse:
         "action": decision.action,
         "message": "Décision prise en compte, reprise du pipeline en cours.",
     })
+
+
+@app.post("/runs/{run_id}/cancel", tags=["Pipeline"])
+async def cancel_run(run_id: str) -> JSONResponse:
+    """Annule un run en cours. Le pipeline s'arrête proprement entre deux nœuds."""
+    if run_id not in _runs:
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' introuvable.")
+
+    info = _runs[run_id]
+    if info["status"] not in ("running", "awaiting_hitl"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Run '{run_id}' ne peut pas être annulé (statut: {info['status']}).",
+        )
+
+    info["_cancel_event"].set()
+    # Si en attente HITL, débloquer aussi le thread worker
+    if info["status"] == "awaiting_hitl":
+        info["_hitl_event"].set()
+
+    return JSONResponse({"run_id": run_id, "message": "Annulation demandée."})

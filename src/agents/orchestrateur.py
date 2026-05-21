@@ -90,8 +90,8 @@ def _table_candidats(candidats: list[dict], profils_par_id: dict[str, dict]) -> 
     ]
     for c in sorted(candidats, key=lambda x: x.get("score_final", 0), reverse=True):
         profil = profils_par_id.get(c.get("candidat_id"), {})
-        lieu_source = _valeur(profil.get("source"))
-        lien = profil.get("url") or "Non renseigné"
+        lieu_source = _valeur(profil.get("source") or c.get("source"))
+        lien = profil.get("url") or c.get("url") or "Non renseigné"
         lignes.append(_ligne_table([
             c.get("nom", "Non renseigné"),
             lieu_source,

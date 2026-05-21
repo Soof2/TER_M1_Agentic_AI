@@ -18,7 +18,7 @@ from src.logger import get_logger
 _log = get_logger("A7_recruteur")
 
 
-def recruteur_node(state: GraphState) -> dict:  # noqa: C901
+def recruteur_node(state: GraphState) -> dict:
     """Rédige des messages de contact pour les candidats validés.
 
     Mode absolu  : candidats avec score >= SCORE_SEUIL_CONTACT.

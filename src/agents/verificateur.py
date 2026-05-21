@@ -247,7 +247,7 @@ Contrôle l'adéquation réelle du candidat et renvoie l'objet JSON demandé."""
         try:
             validation = _parse_validation_json(response.content)
             break
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             last_error = exc
             _log.warning(
                 "A5 JSON invalide pour %s tentative %d/3 : %s",

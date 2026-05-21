@@ -23,6 +23,7 @@ Persistence : ./data/chromadb/  (créé automatiquement au premier run)
 
 import hashlib
 import os
+import time
 import chromadb
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 from src.logger import get_logger
@@ -74,7 +75,7 @@ class MemoireRAG:
         """
         try:
             return self._client.get_collection(name)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
         if self._ef is None:
@@ -86,7 +87,7 @@ class MemoireRAG:
                 embedding_function=self._ef,
                 metadata={"hnsw:space": "cosine"},
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             message = str(exc).lower()
             if "embedding function conflict" not in message:
                 raise
@@ -129,6 +130,8 @@ class MemoireRAG:
         source: str,
         remarques: str = "",
         fiche_id: str = "",
+        statut: str = "valide",
+        url: str = "",
     ) -> None:
         """Stocke un candidat évalué dans la base vectorielle.
 
@@ -136,6 +139,7 @@ class MemoireRAG:
         laquelle il a été évalué : c'est ce qui permet à la lecture
         ultérieure de ne remonter que des candidats évalués dans un
         contexte de poste comparable.
+        statut et url permettent la blacklist inter-runs et le cache de score.
         """
         document = profil_brut[:2000] if profil_brut.strip() else f"Profil de {nom}"
 
@@ -145,6 +149,9 @@ class MemoireRAG:
             "source": source,
             "remarques": remarques[:500],
             "fiche_id": fiche_id,
+            "statut": statut,
+            "url": url or "",
+            "last_seen": time.time(),
         }
 
         try:
@@ -254,6 +261,123 @@ class MemoireRAG:
             })
 
         return similaires
+
+    def get_candidats_connus(
+        self,
+        fiche_poste: str,
+        seuil_fiche: float = 0.75,
+        max_age_jours: int = 30,
+    ) -> list[dict]:
+        """Retourne les candidats validés pour une fiche similaire, récents.
+
+        Utilisé par injection_rag pour compléter les résultats d'un run
+        avec des profils déjà connus depuis la mémoire inter-runs.
+
+        Returns liste de dicts {candidat_id, nom, score, source, remarques, url}.
+        """
+        if self._candidats.count() == 0 or not fiche_poste.strip():
+            return []
+
+        fiche_ids_ok = set(self._fiches_similaires_ids(fiche_poste, seuil_fiche))
+        if not fiche_ids_ok:
+            return []
+
+        cutoff = time.time() - max_age_jours * 86400
+
+        try:
+            results = self._candidats.get(
+                where={"statut": {"$eq": "valide"}},
+                include=["metadatas"],
+                limit=50,
+            )
+        except Exception as e:
+            _log.warning("Erreur get_candidats_connus : %s", e)
+            return []
+
+        ids = results.get("ids", [])
+        metas = results.get("metadatas", []) or []
+
+        connus = []
+        for cid, meta in zip(ids, metas):
+            if meta.get("fiche_id", "") not in fiche_ids_ok:
+                continue
+            if meta.get("last_seen", 0) < cutoff:
+                continue
+            connus.append({
+                "candidat_id": cid,
+                "nom": meta.get("nom", "?"),
+                "score": meta.get("score", 0),
+                "source": meta.get("source", ""),
+                "remarques": meta.get("remarques", ""),
+                "url": meta.get("url", ""),
+            })
+
+        connus.sort(key=lambda x: x["score"], reverse=True)
+        return connus[:10]
+
+    def est_blackliste(self, url: str) -> bool:
+        """Vrai si cette URL a déjà été évaluée et marquée invalide.
+
+        Requête purement metadata (pas d'embedding) → très rapide.
+        Retourne False en cas d'erreur pour ne jamais bloquer le pipeline.
+        """
+        if not url or self._candidats.count() == 0:
+            return False
+        try:
+            results = self._candidats.get(
+                where={"url": {"$eq": url}},
+                include=["metadatas"],
+                limit=10,
+            )
+            return any(m.get("statut") == "invalide" for m in results.get("metadatas", []))
+        except Exception as e:
+            _log.debug("Blacklist check ignoré (champ manquant ou erreur) : %s", e)
+            return False
+
+    def get_score_cache(
+        self,
+        url: str,
+        fiche_poste: str | None = None,
+        seuil_fiche: float = 0.85,
+    ) -> dict | None:
+        """Retourne le score mis en cache pour cette URL si la fiche est similaire.
+
+        Conditions :
+        - L'URL a déjà été évaluée avec statut "valide"
+        - La fiche de poste stockée est suffisamment similaire (cosine >= seuil_fiche)
+
+        Returns dict {nom, score, source, remarques} ou None si pas de cache valide.
+        Retourne None en cas d'erreur pour ne jamais bloquer le pipeline.
+        """
+        if not url or self._candidats.count() == 0:
+            return None
+        try:
+            results = self._candidats.get(
+                where={"url": {"$eq": url}},
+                include=["metadatas"],
+                limit=10,
+            )
+        except Exception as e:
+            _log.debug("Cache check ignoré : %s", e)
+            return None
+
+        metas = [m for m in results.get("metadatas", []) if m.get("statut") == "valide"]
+        if not metas:
+            return None
+
+        if fiche_poste is not None:
+            fiche_ids_ok = set(self._fiches_similaires_ids(fiche_poste, seuil_fiche))
+            metas = [m for m in metas if m.get("fiche_id", "") in fiche_ids_ok]
+            if not metas:
+                return None
+
+        best = max(metas, key=lambda m: m.get("score", 0))
+        return {
+            "nom": best.get("nom", "?"),
+            "score": best.get("score", 0),
+            "source": best.get("source", "?"),
+            "remarques": best.get("remarques", ""),
+        }
 
     def compter(self) -> int:
         """Retourne le nombre total de candidats en base."""
