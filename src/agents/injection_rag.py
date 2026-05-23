@@ -48,7 +48,7 @@ def injection_rag_node(state: GraphState) -> dict:
             score_final=c["score"],
             statut="valide",
             remarques=f"[RAG] Candidat connu (run précédent). {c['remarques'][:120]}".strip(),
-            source=c.get("source", ""),
+            source=c.get("source") or "profil déjà récupéré",
             url=c.get("url") or None,
         ))
 

@@ -398,7 +398,9 @@ async def runs_page() -> None:
                     with ui.card().classes("glass-card w-full p-4"):
                         with ui.row().classes("items-center justify-between w-full gap-3"):
                             with ui.column().classes("gap-1"):
-                                ui.label(run["run_id"]).classes("font-mono text-sm")
+                                fiche = run.get("fiche_poste", "") or run["run_id"]
+                                ui.label(fiche[:100] + ("..." if len(fiche) > 100 else "")).classes("font-medium text-sm")
+                                ui.label(run["run_id"]).classes("font-mono text-xs text-grey-6")
                                 ui.label(f"Debut : {_format_date(run.get('started_at'))}").classes(
                                     "text-xs text-grey-7"
                                 )

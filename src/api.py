@@ -27,6 +27,7 @@ import os
 import queue
 import sqlite3
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -473,18 +474,18 @@ def _rapport_microservices(fiche_poste: str, payload: dict) -> str:
 
 
 def _run_pipeline_microservices(run_id: str, fiche_poste: str, with_interrupt: bool) -> None:
-    """Exécute le pipeline distribué via le microservice orchestrateur HTTP."""
+    """Exécute le pipeline distribué via le microservice orchestrateur HTTP.
+
+    Lance le pipeline en mode non-bloquant (POST /pipeline retourne immédiatement),
+    puis poll GET /pipeline/{run_id}/status toutes les 2 s. Si la pause HITL est
+    activée et que l'orchestrateur passe à "awaiting_hitl", bloque sur l'événement
+    local _hitl_event, puis transmet la décision à l'orchestrateur via
+    POST /hitl/{run_id}.
+    """
     from src.logger import get_logger
 
     log = get_logger("api.microservices")
     try:
-        if with_interrupt:
-            log.warning(
-                "Run %s : HITL demandé mais non supporté en mode microservices, "
-                "exécution sans interruption.",
-                run_id,
-            )
-
         _runs[run_id]["status"] = "running"
         _runs[run_id]["mode_execution"] = "microservices"
         _save_run(run_id)
@@ -493,14 +494,85 @@ def _run_pipeline_microservices(run_id: str, fiche_poste: str, with_interrupt: b
             "mode_execution": "microservices",
         })
 
-        with httpx.Client(timeout=httpx.Timeout(300.0, read=300.0)) as client:
-            response = client.post(
-                f"{_SVC_ORCHESTRATEUR}/pipeline",
-                json={"run_id": run_id, "fiche_poste": fiche_poste},
-            )
-            response.raise_for_status()
-            payload = response.json()
+        cancel_event: threading.Event = _runs[run_id]["_cancel_event"]
+        hitl_event: threading.Event   = _runs[run_id]["_hitl_event"]
 
+        # --- Démarrage non-bloquant ---
+        with httpx.Client(timeout=30.0) as client:
+            r = client.post(
+                f"{_SVC_ORCHESTRATEUR}/pipeline",
+                json={
+                    "run_id": run_id,
+                    "fiche_poste": fiche_poste,
+                    "with_interrupt": with_interrupt,
+                },
+            )
+            r.raise_for_status()
+
+        # --- Polling jusqu'à "done" ou "error" ---
+        payload: dict | None = None
+        while payload is None:
+            if cancel_event.is_set():
+                raise InterruptedError("Run annulé par l'utilisateur.")
+
+            with httpx.Client(timeout=10.0) as client:
+                r = client.get(f"{_SVC_ORCHESTRATEUR}/pipeline/{run_id}/status")
+                r.raise_for_status()
+                status_data = r.json()
+
+            orch_status = status_data.get("status")
+
+            if orch_status == "awaiting_hitl" and _runs[run_id]["status"] != "awaiting_hitl":
+                # Transition locale vers l'état d'attente HITL
+                candidats = status_data.get("candidats_pending", [])
+                _runs[run_id]["status"] = "awaiting_hitl"
+                _runs[run_id]["_candidats_pending_hitl"] = candidats
+                _save_run(run_id)
+                _push_event(run_id, "awaiting_hitl", {
+                    "candidats": candidats,
+                    "next_node": "recruteur",
+                })
+                log.info(
+                    "Run %s : pause HITL — %d candidat(s) en attente.", run_id, len(candidats)
+                )
+
+                # Attente bloquante de la décision humaine (via POST /runs/{run_id}/hitl)
+                got = hitl_event.wait(timeout=_HITL_TIMEOUT)
+                if not got:
+                    raise TimeoutError(
+                        f"Aucune décision HITL reçue en {_HITL_TIMEOUT}s, run abandonné."
+                    )
+                if cancel_event.is_set():
+                    raise InterruptedError("Run annulé par l'utilisateur.")
+
+                decision = _runs[run_id]["_hitl_decision"]
+                log.info("Run %s : décision HITL reçue : %s", run_id, decision["action"])
+                _push_event(run_id, "hitl_decision", {"action": decision["action"]})
+
+                # Transmission de la décision à l'orchestrateur
+                with httpx.Client(timeout=10.0) as client:
+                    r = client.post(
+                        f"{_SVC_ORCHESTRATEUR}/hitl/{run_id}",
+                        json=decision,
+                    )
+                    r.raise_for_status()
+
+                _runs[run_id]["status"] = "running"
+                _save_run(run_id)
+
+            elif orch_status == "done":
+                payload = status_data.get("result") or {}
+
+            elif orch_status == "error":
+                raise RuntimeError(
+                    status_data.get("error") or "Erreur inconnue dans l'orchestrateur."
+                )
+
+            else:
+                # "running" : attendre avant le prochain poll
+                time.sleep(2)
+
+        # --- Traitement du résultat final ---
         for node in (
             "analyste",
             "chercheur_stratege",
@@ -538,6 +610,7 @@ def _run_pipeline_microservices(run_id: str, fiche_poste: str, with_interrupt: b
             "mode_execution": "microservices",
         })
         log.info("Run %s : pipeline microservices terminé avec succès.", run_id)
+
     except Exception as exc:  # noqa: BLE001
         log.exception("Run %s : erreur pipeline microservices.", run_id)
         _runs[run_id].update({
@@ -742,6 +815,7 @@ async def list_runs() -> JSONResponse:
         {
             "run_id": r["run_id"],
             "status": r["status"],
+            "fiche_poste": r.get("fiche_poste", "")[:120],
             "mode_execution": r.get("mode_execution", "microservices" if _SVC_ORCHESTRATEUR else "langgraph"),
             "started_at": r.get("started_at"),
             "finished_at": r.get("finished_at"),

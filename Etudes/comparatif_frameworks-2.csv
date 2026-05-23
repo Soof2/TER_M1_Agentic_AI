@@ -1,0 +1,636 @@
+Comparatif argumenté — chaque case compare directement chaque framework aux autres;;;;;;;;;
+Chaque case : NOTE ★ — résumé — POURQUOI SUPÉRIEUR ou INFÉRIEUR à chaque concurrent nommé explicitement. Voir le document Word joint pour les définitions complètes.;;;;;;;;;
+"Critère
+(voir Word pour définitions)";LangGraph;CrewAI;AutoGen;CAMEL;MetaGPT;"Strands
+(AWS)";LlamaIndex;"Semantic
+Kernel";"OpenAI
+Swarm"
+SCORE TOTAL /55;51;47;48;37;31;27;29;22;15
+"Architecture
+de base";"★★★★★  SUPÉRIEUR À TOUS
+
+Structure : graphe orienté — chaque agent est un nœud, chaque lien est une flèche conditionnelle.
+
+POURQUOI C'EST MIEUX QUE CREWAI : CrewAI impose une structure ""équipe avec chef"" — linéaire et hiérarchique. LangGraph permet des boucles (corriger jusqu'à satisfaction), des branches (si A alors X sinon Y), du parallélisme (2 agents en même temps) et des retours en arrière. Ces 4 capacités sont impossibles ou très difficiles dans CrewAI.
+
+POURQUOI C'EST MIEUX QU'AUTOGEN : AutoGen utilise des ""conversations"" où la logique de flux est cachée dans les messages. LangGraph la rend EXPLICITE dans la structure du code — on voit le workflow d'un coup d'œil, on peut le déboguer nœud par nœud.
+
+POURQUOI C'EST MIEUX QUE METAGPT : MetaGPT est un pipeline linéaire A→B→C→D. Impossible de revenir en arrière si C échoue. LangGraph gère cela nativement.
+
+POURQUOI C'EST MIEUX QUE SWARM : Swarm = handoffs (A passe à B, B passe à C). Pas de boucle, pas de branche, pas de retour. LangGraph est infiniment plus expressif.";"★★★★☆  TRÈS BON — meilleur que AutoGen pour la lisibilité
+
+Structure : équipes de rôles (Crew + Flow). Un chef distribue les tâches à des agents spécialisés.
+
+SUPÉRIEUR À AUTOGEN SUR LA LISIBILITÉ : Chez AutoGen, le flux est dans les messages (implicite). Chez CrewAI, les rôles et la hiérarchie sont déclarés explicitement dans le code — plus lisible pour une équipe.
+
+SUPÉRIEUR À METAGPT SUR LA FLEXIBILITÉ : MetaGPT impose PM→Dev→QA uniquement. CrewAI permet n'importe quel rôle dans n'importe quel domaine.
+
+INFÉRIEUR À LANGGRAPH SUR LA COMPLEXITÉ : Pour des workflows non-linéaires (boucles, branches multiples, retours arrière), LangGraph gagne. La structure ""chef + équipe"" de CrewAI est un plafond qu'on atteint sur les cas avancés.
+
+SUPÉRIEUR À SWARM, LLAMAINDEX, SEMANTIC KERNEL : Ces 3 ne sont pas des architectures SMA au sens propre.";"★★★★☆  TRÈS BON — le plus flexible sur la communication
+
+Structure : agents vus comme participants d'une conversation asynchrone.
+
+SUPÉRIEUR À CREWAI SUR LA FLEXIBILITÉ DU FLUX : CrewAI est hiérarchique par essence. AutoGen permet des patterns symétriques (agents pairs), des GroupChats, des sous-conversations imbriquées que CrewAI ne supporte pas nativement.
+
+SUPÉRIEUR À METAGPT, CAMEL, SWARM : Ces 3 ont des architectures plus rigides ou plus simples qu'AutoGen.
+
+INFÉRIEUR À LANGGRAPH SUR LA PRÉVISIBILITÉ : La logique de coordination d'AutoGen est dans les messages texte (implicite). Sur un système complexe à 10+ agents, suivre ce flux est plus difficile qu'un graphe LangGraph où tout est dessiné explicitement dans le code.";"★★★☆☆  CORRECT — peer-to-peer, fidèle à la théorie
+
+Structure : peer-to-peer (agents dialoguent directement sans superviseur).
+
+SUPÉRIEUR À METAGPT SUR L'AUTONOMIE : MetaGPT suit des SOPs figées. CAMEL permet des interactions libres et émergentes entre agents.
+
+SUPÉRIEUR À SWARM : Swarm est plus limité. CAMEL a une vraie conception théorique des SMA.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN SUR LA SCALABILITÉ : CAMEL est optimisé pour 2 agents en dialogue. Au-delà, la coordination devient imprévisible. Les 3 autres gèrent naturellement 5, 10, 20 agents.";"★★★☆☆  CORRECT dans son domaine, rigide ailleurs
+
+Structure : pipeline assembly-line calqué sur une équipe de dev (PM→Architect→Dev→QA→DevOps).
+
+SUPÉRIEUR À SWARM, LLAMAINDEX, SEMANTIC KERNEL dans son cas d'usage (génération de code). Ces 3 ne proposent pas de workflow multi-agents équivalent pour la création logicielle.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN, CAMEL : Tous ces frameworks permettent de créer n'importe quel workflow. MetaGPT est enfermé dans son template ""équipe de dev"". Si ton use case n'est pas du développement logiciel, MetaGPT est inadapté — les abstractions PM/Dev/QA n'ont plus aucun sens.";"★★☆☆☆  LIMITÉ — model-first, opaque
+
+Structure : on donne des outils au LLM qui décide lui-même de la logique.
+
+SUPÉRIEUR À SWARM uniquement : Swarm est encore plus limité.
+
+INFÉRIEUR À TOUT LE RESTE : L'approche ""le LLM décide"" est simple à démarrer mais opaque — on ne peut pas prédire ou déboguer facilement le comportement. LangGraph, CrewAI, AutoGen ont tous une structure explicite dans le code. Strands n'en a pas.";"★★☆☆☆  INADAPTÉ aux SMA — excellent pour le RAG
+
+Structure : pipeline RAG (recherche documentaire). Ce n'est pas une architecture multi-agents.
+
+INFÉRIEUR À TOUS SUR L'ARCHITECTURE SMA : LlamaIndex n'est pas conçu pour coordonner des agents autonomes. Son architecture est optimisée pour : document → embeddings → vectorDB → retrieval → réponse. Les ""agents"" sont des moteurs de recherche, pas des agents qui décident.
+
+SUPÉRIEUR À TOUS UNIQUEMENT POUR LE RAG : Si le besoin est d'interroger des documents, LlamaIndex dépasse largement LangGraph, CrewAI, AutoGen sur ce cas précis. Mais ce n'est pas de l'architecture SMA.";"★★☆☆☆  INADAPTÉ aux SMA — bon pour l'intégration Microsoft
+
+Structure : kernel central + plugins. Pensé pour intégrer l'IA dans des apps d'entreprise MS.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN, METAGPT, CAMEL sur tout ce qui concerne les SMA. L'abstraction ""plugin"" n'est pas celle d'un agent autonome — c'est plus proche d'une API interne que d'un agent qui prend des décisions.
+
+CAS OÙ IL DÉPASSE LES AUTRES : Dans l'écosystème Microsoft (Teams, Azure, Copilot), Semantic Kernel est supérieur à tous les autres grâce à ses intégrations natives. Hors de Microsoft, cet avantage disparaît complètement.";"★☆☆☆☆  LE PLUS FAIBLE — outil éducatif seulement
+
+Structure : handoffs uniquement (A passe à B, B passe à C). Pas de boucle, pas de branche.
+
+INFÉRIEUR À TOUS sans exception : LangGraph a le graphe. CrewAI a les équipes. AutoGen a les conversations. CAMEL a le peer-to-peer. MetaGPT a les SOPs. Même Strands, LlamaIndex et Semantic Kernel, malgré leurs limites, ont une vision architecturale plus riche.
+
+OpenAI eux-mêmes disent que c'est un outil pédagogique. La seule chose que Swarm fait mieux que les autres : être compréhensible en 1 heure pour un débutant."
+"Coordination
+entre agents";"★★★★★  SUPÉRIEUR — coordination explicite et prévisible
+
+Arêtes conditionnelles programmées dans le graphe : ""si résultat=erreur → nœud correction, sinon → suite"". Tout est dans le code, rien n'est laissé au hasard.
+
+POURQUOI C'EST MIEUX QU'AUTOGEN : AutoGen coordonne via des messages texte. Si quelque chose se passe mal, il faut lire les logs de conversation pour comprendre pourquoi. Avec LangGraph, on voit exactement quel nœud a pris quelle décision — débogage en minutes plutôt qu'en heures.
+
+POURQUOI C'EST MIEUX QUE CREWAI : CrewAI coordonne hiérarchiquement (chef → agents). Pas de logique conditionnelle fine. LangGraph permet des décisions de coordination beaucoup plus granulaires.
+
+POURQUOI C'EST MIEUX QUE STRANDS : Strands laisse le LLM décider de la coordination. Non-déterministe. LangGraph est 100% déterministe — même entrée = même comportement, toujours.";"★★★★☆  TRÈS BON — hiérarchique, clair, accessible
+
+Un manager distribue les tâches. Rôles et responsabilités clairement définis.
+
+SUPÉRIEUR À METAGPT : MetaGPT a des SOPs figées (PM→Dev→QA toujours dans cet ordre). CrewAI permet au manager de décider dynamiquement qui fait quoi selon le contexte.
+
+SUPÉRIEUR À STRANDS, LLAMAINDEX, SEMANTIC KERNEL, SWARM : Ces 4 n'ont pas de vraie coordination multi-agents structurée.
+
+INFÉRIEUR À LANGGRAPH : La coordination chez CrewAI est descendante (chef → agents). Pas de logique conditionnelle fine ni de boucles complexes. Un agent ne peut pas décider de revenir en arrière dans le workflow — seul le framework (ou le manager LLM) peut le faire.
+
+INFÉRIEUR À AUTOGEN pour les workflows où les agents doivent être vraiment égaux et se coordonner entre pairs.";"★★★★☆  TRÈS BON — le plus flexible, centralisé ou pair-à-pair
+
+Unique : double mode. Centralisé (superviseur) OU pair-à-pair selon le besoin.
+
+SUPÉRIEUR À CREWAI SUR LA SYMÉTRIE : CrewAI impose un chef. AutoGen peut coordonner des agents totalement égaux qui décident ensemble via GroupChat.
+
+SUPÉRIEUR À METAGPT, CAMEL, SWARM : Ces 3 ont des modèles de coordination plus rigides ou plus simples.
+
+INFÉRIEUR À LANGGRAPH SUR LA PRÉVISIBILITÉ : La coordination AutoGen émerge des conversations — flexible mais moins prévisible qu'un graphe LangGraph où chaque décision de coordination est codée explicitement.";"★★★☆☆  CORRECT — décentralisé, adapté à la recherche
+
+Pair-à-pair sans chef. Les agents s'organisent librement.
+
+SUPÉRIEUR À METAGPT SUR L'ADAPTABILITÉ : MetaGPT suit des SOPs fixes. CAMEL permet une coordination émergente que MetaGPT est incapable d'avoir.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN SUR LE CONTRÔLE : La coordination décentralisée de CAMEL est imprévisible en production. Les 3 autres offrent plus de garanties sur le comportement du système.";"★★★☆☆  CORRECT uniquement dans son domaine
+
+SOPs fixes : PM→Dev→QA→DevOps toujours dans cet ordre.
+
+SUPÉRIEUR À STRANDS, SWARM : Ces 2 n'ont pas de coordination structurée. MetaGPT a au moins un pipeline clair et reproductible.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN, CAMEL : Ces 4 s'adaptent au contexte. MetaGPT ne s'adapte jamais — si une étape échoue, il n'y a pas de mécanisme natif pour revenir en arrière ou prendre une décision alternative.";"★★☆☆☆  LIMITÉ — le LLM décide, non-déterministe
+
+Le LLM orchestre lui-même les outils et agents.
+
+SUPÉRIEUR À SWARM : Swarm est encore plus passif.
+INFÉRIEUR À TOUT LE RESTE : Pas de structure de coordination explicite. Le comportement dépend du LLM — impossible de garantir que deux appels identiques donneront le même résultat. Inacceptable pour un système de production critique.";"★★☆☆☆  PAS UNE COORDINATION SMA
+
+Flux linéaire : question → recherche → réponse.
+
+INFÉRIEUR À TOUS SUR LA COORDINATION SMA : Il n'y a pas de coordination entre agents chez LlamaIndex — c'est un agent unique qui interroge des outils. Comparer LlamaIndex aux autres sur ce critère n'a pas vraiment de sens tant le paradigme est différent.";"★★☆☆☆  SÉQUENTIEL — appels de fonctions ordonnés
+
+Le kernel appelle des plugins dans un ordre défini par un planner.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN, CAMEL, METAGPT : Ces 5 coordonnent de vrais agents avec des objectifs et des décisions. Semantic Kernel orchestre des fonctions — la nuance est importante. Un plugin n'est pas un agent autonome.";"★☆☆☆☆  MINIMAL — routage conditionnel seulement
+
+""Si condition X → aller à l'agent Y."" C'est tout.
+
+INFÉRIEUR À TOUS : Chaque autre framework dans ce tableau a une vision plus riche de la coordination. OpenAI Swarm est le système de coordination le plus basique possible — utile pour apprendre le concept, inutilisable pour des cas réels."
+"Support
+multi-agents";"★★★★★  NATIF ET COMPLET
+
+Sous-graphes imbriqués, supervision d'agents, état partagé typé, checkpointing.
+
+SUPÉRIEUR À CREWAI : CrewAI est excellent mais LangGraph va plus loin avec les sous-graphes (un nœud peut être lui-même un graphe d'agents) et la supervision (un agent superviseur peut détecter et relancer un sous-agent en échec).
+
+SUPÉRIEUR À AUTOGEN : AutoGen gère très bien les GroupChats mais sa gestion de l'état partagé est moins robuste que le graph state de LangGraph — qui est typé, auditable et persistable.
+
+SUPÉRIEUR À METAGPT, CAMEL : Ces 2 gèrent le multi-agents dans des contextes limités (dev logiciel pour MetaGPT, 2 agents pour CAMEL).
+
+SUPÉRIEUR À STRANDS, LLAMAINDEX, SEMANTIC KERNEL, SWARM : Ces 4 ne sont pas des frameworks SMA de premier ordre.";"★★★★★  EXCELLENT — le plus accessible pour le multi-agents
+
+Le concept de Crew EST la raison d'être du framework.
+
+ÉGAL À AUTOGEN ET LANGGRAPH sur le niveau de support multi-agents de base.
+
+SUPÉRIEUR À METAGPT SUR LA FLEXIBILITÉ : MetaGPT impose des rôles de dev. CrewAI permet n'importe quel rôle dans n'importe quel domaine.
+
+SUPÉRIEUR À TOUS SUR L'ACCESSIBILITÉ : Créer une équipe de 3 agents = 10 lignes de code. C'est 3× plus court qu'AutoGen et 5× plus court que LangGraph pour le même résultat basique.
+
+INFÉRIEUR À LANGGRAPH SUR LES CAS AVANCÉS : Pour des agents vraiment imbriqués, des superviseurs de superviseurs, ou de la gestion d'état complexe, LangGraph offre plus de contrôle.";"★★★★★  EXCELLENT — le plus avancé sur les patterns d'interaction
+
+GroupChat, NestedChat, agents avec LLMs différents dans la même conversation.
+
+UNIQUE PAR RAPPORT À LANGGRAPH ET CREWAI : AutoGen permet à différents agents d'utiliser différents LLMs dans la même conversation (agent A = GPT-4, agent B = Claude). Ni LangGraph ni CrewAI ne proposent ça aussi naturellement.
+
+SUPÉRIEUR À METAGPT, CAMEL : Ces 2 ont des patterns d'interaction plus limités.
+
+ÉGAL À LANGGRAPH ET CREWAI sur le niveau général de support multi-agents.";"★★★★☆  TRÈS BON — mais optimisé pour 2 agents
+
+Conçu pour les interactions entre agents, mais le cas optimisé est 2 agents en dialogue.
+
+SUPÉRIEUR À METAGPT SUR LA FLEXIBILITÉ des interactions : MetaGPT a des rôles imposés. CAMEL est plus libre.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN SUR LA SCALABILITÉ : Ces 3 gèrent naturellement 5, 10, 20 agents. CAMEL commence à montrer des limites au-delà de 3-4 agents — la coordination devient moins fiable.";"★★★★☆  TRÈS BON dans son domaine — rigide hors de lui
+
+Plusieurs agents bien définis (PM, Architect, Dev, QA). Coordination claire dans le contexte du dev.
+
+SUPÉRIEUR À STRANDS, LLAMAINDEX, SEMANTIC KERNEL, SWARM sur la richesse du multi-agents dans son domaine.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN SUR LA GÉNÉRALITÉ : Ces 3 permettent n'importe quel workflow multi-agents. MetaGPT est enfermé dans son template dev. Essaie de créer une équipe de juristes ou d'analystes financiers avec MetaGPT — les abstractions PM/Dev/QA ne correspondent plus à rien.";"★★☆☆☆  POSSIBLE MAIS SECONDAIRE
+
+Pensé pour un agent unique avec des outils. Multi-agents faisable mais pas le paradigme central.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN, CAMEL, METAGPT : Ces 5 ont le multi-agents comme objectif central. Chez Strands, c'est une fonctionnalité secondaire — la coordination entre agents n'est pas aussi bien définie.";"★★☆☆☆  UN AGENT + OUTILS DE RECHERCHE
+
+Un agent principal avec des sous-agents de recherche. Ces sous-agents sont des outils, pas des agents autonomes.
+
+INFÉRIEUR À TOUS SUR LE SMA : Les sous-agents LlamaIndex ne communiquent pas entre eux, ne prennent pas de décisions indépendantes, n'ont pas de mémoire propre. C'est un agent unique bien équipé, pas un système multi-agents.";"★★☆☆☆  AJOUTÉ APRÈS COUP — pas le paradigme central
+
+Multi-agents possible mais l'abstraction ""plugin"" ne correspond pas naturellement à un agent autonome.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN, CAMEL, METAGPT : Ces 5 ont pensé le multi-agents dès la conception. Semantic Kernel l'a ajouté après — ça se ressent dans la fluidité des abstractions.";"★☆☆☆☆  ROUTAGE SÉQUENTIEL — pas du multi-agents réel
+
+Techniquement plusieurs agents, mais sans état partagé, sans supervision, sans gestion des conflits.
+
+INFÉRIEUR À TOUS : Chaque autre framework dans ce tableau propose une vraie coordination multi-agents. Swarm propose du routage conditionnel déguisé en multi-agents."
+"Intégration
+principes SMA";"★★★★★  MEILLEUR ALIGNEMENT THÉORIQUE
+
+Les 4 principes SMA tous couverts : Autonomie (nœuds indépendants), Réactivité (arêtes conditionnelles), Proactivité (actions déclenchées par l'état), Sociabilité (state partagé = canal de communication).
+
+SUPÉRIEUR À CREWAI : CrewAI couvre l'autonomie et la sociabilité mais la proactivité est limitée — un agent ne sort pas spontanément de sa définition.
+
+SUPÉRIEUR À AUTOGEN : Fort sur sociabilité et proactivité conversationnelle, mais la structure formelle des SMA est moins explicite.
+
+SUPÉRIEUR À METAGPT : Les SOPs ressemblent aux protocoles SMA mais sont figées. Un vrai SMA s'adapte — MetaGPT ne s'adapte pas.
+
+SUPÉRIEUR À LLAMAINDEX, SEMANTIC KERNEL : Ces 2 ne sont pas des frameworks SMA — leurs ""agents"" ne correspondent pas aux principes théoriques.";"★★★★☆  TRÈS BON — alignement pratique sans fondements théoriques formels
+
+Autonomie et sociabilité bien couvertes. Réactivité correcte. Proactivité limitée.
+
+SUPÉRIEUR À METAGPT SUR L'AUTONOMIE : Les agents CrewAI ont plus de latitude que ceux de MetaGPT, qui suivent des SOPs fixes.
+
+INFÉRIEUR À LANGGRAPH SUR LA RIGUEUR : LangGraph implémente les 4 principes SMA de façon formelle. CrewAI les approxime intuitivement — ça marche en pratique mais c'est moins rigoureux théoriquement.
+
+INFÉRIEUR À CAMEL SUR LA THÉORIE : CAMEL est conçu pour étudier les SMA théoriques. CrewAI est conçu pour les appliquer pragmatiquement.";"★★★★☆  TRÈS BON — fort sur la sociabilité
+
+Fort sur sociabilité (débat entre agents) et proactivité conversationnelle. Human-in-the-loop natif.
+
+SUPÉRIEUR À METAGPT SUR LA SOCIABILITÉ : Les agents AutoGen débattent et s'adaptent mutuellement. Les agents MetaGPT exécutent leurs SOPs sans jamais interagir de façon émergente.
+
+INFÉRIEUR À LANGGRAPH SUR LA COMPLÉTUDE : LangGraph couvre les 4 principes SMA de façon plus formelle et structurée.
+
+ÉGAL À CAMEL SUR LA SOCIABILITÉ, SUPÉRIEUR EN APPLICABILITÉ : CAMEL est plus théorique, AutoGen plus applicable en production.";"★★★★☆  MEILLEURE FIDÉLITÉ THÉORIQUE — mais peu pratique
+
+Conçu pour étudier les comportements émergents — concept central de la recherche SMA.
+
+SUPÉRIEUR À METAGPT, STRANDS, LLAMAINDEX, SEMANTIC KERNEL, SWARM sur la fidélité aux principes théoriques SMA.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN SUR L'APPLICABILITÉ : Ces 3 implémentent les principes SMA ET permettent de construire des applications réelles. CAMEL reste principalement un outil de recherche.";"★★★☆☆  ALIGNEMENT PARTIEL — SOPs ≈ protocoles SMA mais rigides
+
+Les SOPs ressemblent aux protocoles d'interaction SMA. Mais un vrai SMA s'adapte dynamiquement — MetaGPT suit un script fixe, ce qui viole le principe d'autonomie réelle.
+
+SUPÉRIEUR À STRANDS, LLAMAINDEX, SEMANTIC KERNEL, SWARM : Ces 4 n'ont pas de conception SMA du tout.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN, CAMEL : Ces 4 permettent une autonomie réelle des agents. MetaGPT ne le permet pas — un agent Dev ne peut pas décider par lui-même de questionner les specs du PM.";"★★☆☆☆  PAS UN FRAMEWORK SMA
+
+L'approche ""le LLM décide"" donne une apparence d'autonomie, mais sans structure formelle SMA.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN, CAMEL, METAGPT : Ces 5 ont une conception explicite des agents et de leurs interactions. Strands n'a pas de notion formelle d'agents avec des objectifs distincts et des protocoles de communication.";"★☆☆☆☆  HORS SUJET — moteur de recherche, pas SMA
+
+Les ""agents"" LlamaIndex ne correspondent à aucun principe SMA. Ils ne décident pas, ne communiquent pas entre eux, n'ont pas d'objectifs propres.
+
+ÉGAL À SEMANTIC KERNEL ET SWARM sur ce critère : ces 3 ne sont simplement pas des frameworks SMA.";"★☆☆☆☆  CONÇU POUR AUTRE CHOSE
+
+Outil d'intégration de l'IA dans des apps d'entreprise, pas de SMA. Les concepts SMA (autonomie, négociation, émergence) sont absents du design.
+
+INFÉRIEUR À TOUS LES AUTRES sur ce critère, à égalité avec LlamaIndex et Swarm.";"★☆☆☆☆  CONCEPTS SMA AU MINIMUM
+
+Illustre les concepts de base (plusieurs agents, passage de contexte) sans les implémenter correctement.
+
+INFÉRIEUR À TOUS : Pas d'autonomie réelle (routines fixes), pas de sociabilité structurée, pas d'émergence possible. OpenAI Swarm montre ce que sont les SMA, ne les implémente pas."
+"Communication
+inter-agents";"★★★★★  SUPÉRIEUR — état partagé typé, traçable, débogable
+
+Via un TypedDict Python : chaque agent lit/écrit des champs précis. Les arêtes définissent qui transmet quoi à qui.
+
+SUPÉRIEUR À AUTOGEN : AutoGen communique par messages texte (riche mais coûteux en tokens et difficile à parser). LangGraph communique par données structurées et typées — moins d'ambiguïté, plus de fiabilité.
+
+SUPÉRIEUR À CREWAI : CrewAI partage la mémoire globalement. LangGraph définit exactement quels champs chaque agent peut lire/écrire — contrôle plus fin.
+
+SUPÉRIEUR À METAGPT : MetaGPT communique via des artefacts (documents formels). LangGraph est plus flexible — on peut passer n'importe quelle structure de données.
+
+SUPÉRIEUR À SWARM : Swarm passe juste l'historique brut. LangGraph passe des données structurées, typées et auditables.";"★★★★☆  TRÈS BON — délégation + mémoire partagée
+
+Mémoire partagée entre tous les agents + délégation de tâches.
+
+SUPÉRIEUR À METAGPT : MetaGPT communique par artefacts (specs, code) — format rigide. CrewAI permet des communications plus flexibles et contextuelles.
+
+INFÉRIEUR À LANGGRAPH SUR LE CONTRÔLE : LangGraph définit exactement qui peut accéder à quoi dans l'état. CrewAI partage tout globalement — moins de granularité.
+
+INFÉRIEUR À AUTOGEN SUR LA RICHESSE DES PATTERNS : AutoGen supporte des protocoles de communication custom beaucoup plus avancés.";"★★★★★  SUPÉRIEUR — protocoles les plus riches et flexibles
+
+Messages asynchrones, protocoles custom, adressage ciblé ou broadcast.
+
+SUPÉRIEUR À CREWAI : CrewAI délègue des tâches. AutoGen permet des échanges de messages structurés avec des règles précises sur qui répond à qui et quand.
+
+SUPÉRIEUR À LANGGRAPH SUR LA RICHESSE DES PATTERNS : LangGraph a un état structuré. AutoGen permet des patterns de communication que LangGraph ne supporte pas nativement (ex : ""répondre uniquement si le message contient X"").
+
+SUPÉRIEUR À CAMEL : CAMEL dialogue en langage naturel. AutoGen peut faire de même ET supporte des protocoles structurés custom.";"★★★★☆  TRÈS BON — dialogue explicite en langage naturel
+
+Tout se passe dans les messages texte entre agents — transparent et lisible.
+
+SUPÉRIEUR À METAGPT SUR LA LIBERTÉ : MetaGPT communique via des artefacts formels imposés. CAMEL laisse les agents communiquer librement.
+
+INFÉRIEUR À AUTOGEN SUR LES PROTOCOLES : AutoGen supporte des protocoles custom structurés. CAMEL est limité au dialogue en langage naturel — coûteux en tokens et moins précis pour des données structurées.
+
+INFÉRIEUR À LANGGRAPH SUR L'EFFICACITÉ : L'état partagé typé de LangGraph est plus efficace que des dialogues texte pour transmettre des données complexes.";"★★★☆☆  CORRECT — communication via artefacts structurés
+
+Les agents communiquent en produisant des documents formels (specs, code, rapports).
+
+SUPÉRIEUR À STRANDS, SWARM : Ces 2 n'ont pas de mécanisme de communication inter-agents réel.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN, CAMEL : Ces 4 permettent une communication plus riche et plus flexible. MetaGPT est limité aux artefacts documentaires — on ne peut pas passer des données dynamiques entre agents, seulement des documents finis.";"★★☆☆☆  MCP — standardisé mais limité à l'éco AWS
+
+Model Context Protocol. Bien intégré dans Bedrock, peu portable ailleurs.
+
+SUPÉRIEUR À SWARM : Swarm n'a pas de protocole de communication structuré.
+
+INFÉRIEUR À TOUT LE RESTE : MCP est une bonne idée de standardisation mais l'écosystème est jeune et principalement AWS. Les autres frameworks ont des mécanismes de communication plus matures et plus portables.";"★★☆☆☆  PAS DE COMMUNICATION INTER-AGENTS
+
+L'agent interroge des outils (bases de données, APIs). Les sous-agents ne se parlent pas entre eux.
+
+INFÉRIEUR À TOUS SUR CE CRITÈRE : Il n'y a pas de communication entre agents chez LlamaIndex — c'est un flux unidirectionnel vers les données.";"★★☆☆☆  APPELS DE FONCTIONS — pas de vraie communication inter-agents
+
+Les plugins s'appellent comme des fonctions. Très structuré mais pas naturel pour des échanges de contexte riche entre agents autonomes.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN, CAMEL, METAGPT sur la richesse de la communication inter-agents.";"★☆☆☆☆  TRANSFERT BRUT — le minimum absolu
+
+L'historique de conversation est passé d'un agent à l'autre lors du handoff. Pas de structure, pas de typage, pas d'adressage.
+
+INFÉRIEUR À TOUS : Aucun autre framework n'est aussi limité sur la communication. Si le contexte devient trop long, il dépasse la fenêtre du LLM et les premières informations sont perdues."
+"Négociation
+& adaptation";"★★★★☆  TRÈS BON — adaptation déterministe, pas de négociation libre
+
+Conditions programmées : ""si résultat insuffisant → retourner au nœud X"". Adaptation très fiable car 100% déterministe.
+
+SUPÉRIEUR À CREWAI, METAGPT, LLAMAINDEX, SEMANTIC KERNEL, SWARM sur l'adaptation : ces 5 ont peu ou pas de mécanisme d'adaptation dynamique.
+
+INFÉRIEUR À AUTOGEN SUR LA NÉGOCIATION LIBRE : AutoGen permet aux agents de débattre de façon émergente. LangGraph permet uniquement l'adaptation programmée par le développeur — plus prévisible, mais moins créatif.";"★★★☆☆  CORRECT — délégation possible, pas de vraie négociation
+
+Le manager peut réassigner une tâche si un agent échoue. Mais les agents ne remettent pas en question le plan.
+
+SUPÉRIEUR À METAGPT, LLAMAINDEX, SEMANTIC KERNEL, SWARM : Ces 4 n'ont pas de mécanisme de réassignation dynamique.
+
+INFÉRIEUR À LANGGRAPH : LangGraph programme des logiques d'adaptation plus fines.
+INFÉRIEUR À AUTOGEN : AutoGen permet aux agents de débattre et de proposer des alternatives. CrewAI ne le permet pas — la coordination est descendante, jamais ascendante.";"★★★★★  UNIQUE — seul avec vraie négociation entre agents
+
+Pattern Critic+Creator : un agent génère, un autre critique en détail, on itère jusqu'au consensus.
+
+SUPÉRIEUR À TOUS LES AUTRES sur ce critère sans exception :
+- vs LangGraph : LangGraph adapte selon des conditions programmées. AutoGen adapte selon le contenu des échanges — plus riche et plus créatif.
+- vs CrewAI : CrewAI n'a pas de mécanisme de critique mutuelle. AutoGen si.
+- vs CAMEL : CAMEL simule la négociation via le role-play. AutoGen a une vraie infrastructure de critique et d'itération.
+- vs MetaGPT : MetaGPT ne peut pas remettre en question ses SOPs. AutoGen peut tout remettre en question.
+
+IMPACT CONCRET : Pour des tâches créatives ou analytiques, le pattern Critic+Creator produit des outputs meilleurs qu'un seul passage — comme la relecture par les pairs en science.";"★★★☆☆  CORRECT — négociation simulée par role-play
+
+Les agents jouent des rôles opposés et ""négocient"" dans ce cadre.
+
+SUPÉRIEUR À METAGPT, LLAMAINDEX, SEMANTIC KERNEL, SWARM : Ces 4 n'ont aucun mécanisme de négociation.
+
+INFÉRIEUR À AUTOGEN : AutoGen a une vraie infrastructure de critique et d'itération. CAMEL simule la négociation via le jeu de rôles — moins fiable en production car le résultat dépend de la créativité du LLM dans son rôle.
+
+INFÉRIEUR À LANGGRAPH : LangGraph offre une adaptation déterministe. CAMEL offre une adaptation émergente — imprévisible.";"★☆☆☆☆  ZÉRO NÉGOCIATION — défaut critique
+
+Les SOPs sont immuables. Le Dev code les specs du PM même si elles sont incorrectes. Aucun mécanisme natif pour qu'un agent questionne les décisions d'un autre.
+
+INFÉRIEUR À TOUS SAUF LLAMAINDEX, SEMANTIC KERNEL ET SWARM : Ces 3 sont aussi à 1/5, mais MetaGPT a l'excuse d'être un pipeline volontairement rigide. Pour un framework qui se dit ""multi-agents collaboratif"", l'absence de négociation est sa faiblesse la plus sévère.";"★★☆☆☆  ADAPTATION VIA LE LLM — pas de vraie négociation
+
+Le modèle peut changer d'approche de lui-même. Adaptatif mais non-structuré.
+
+SUPÉRIEUR À METAGPT, LLAMAINDEX, SEMANTIC KERNEL, SWARM sur l'adaptation.
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN, CAMEL : Ces 4 ont des mécanismes d'adaptation plus contrôlés et prévisibles.";"★☆☆☆☆  INEXISTANT — flux linéaire sans adaptation
+
+Question → recherche → réponse. Pas d'adaptation, pas de négociation. Même structure quelle que soit la qualité du résultat intermédiaire.";"★☆☆☆☆  INEXISTANT — séquences de plugins fixes
+
+Le kernel appelle les plugins dans un ordre. Aucun mécanisme pour qu'un plugin remette en question la stratégie ou propose une alternative.";"★☆☆☆☆  INEXISTANT — routines exécutées sans question
+
+Les agents suivent leurs routines fixes. Pas de mécanisme de remise en question, d'adaptation ou de négociation."
+"Mémoire
+& état";"★★★★★  SUPÉRIEUR — état persistant natif, le meilleur du marché
+
+TypedDict Python sauvegardé après chaque nœud. Reprise exacte après panne. Historique complet auditable.
+
+SUPÉRIEUR À CREWAI SUR LE CONTRÔLE : CrewAI a 3 niveaux de mémoire mais moins de contrôle fin. LangGraph permet d'inspecter et de modifier l'état à n'importe quel point — crucial pour le débogage en production.
+
+SUPÉRIEUR À AUTOGEN : AutoGen a de la mémoire par agent. LangGraph a un état partagé centralisé, typé et persistable — plus robuste pour des systèmes critiques.
+
+SUPÉRIEUR À METAGPT, CAMEL : Ces 2 ont des mémoires moins structurées et moins persistantes.
+
+SUPÉRIEUR À SWARM : Swarm n'a aucune mémoire persistante. En cas de panne = tout perdu.";"★★★★☆  TRÈS BON — 3 niveaux natifs, unique dans cet espace
+
+Court terme (tâche actuelle) + Long terme (entre sessions) + Entité (personnes/concepts).
+
+SUPÉRIEUR À AUTOGEN SUR LA MÉMOIRE MULTI-NIVEAUX : AutoGen a de la mémoire par agent mais pas cette organisation en 3 couches aussi intégrée. Chez CrewAI, les 3 niveaux sont activés en quelques lignes.
+
+SUPÉRIEUR À METAGPT, CAMEL, STRANDS, SEMANTIC KERNEL, SWARM sur la richesse de la mémoire.
+
+INFÉRIEUR À LANGGRAPH SUR LE CONTRÔLE ET LA PERSISTANCE : LangGraph permet un contrôle plus fin (inspecter, modifier, rejouer l'état). La persistance de CrewAI est bonne mais moins granulaire.";"★★★★☆  TRÈS BON — mémoire par agent extensible avec VectorDB
+
+Chaque agent garde son historique. Extension possible avec Chroma, Pinecone, etc.
+
+SUPÉRIEUR À METAGPT, CAMEL, STRANDS, SEMANTIC KERNEL, SWARM.
+
+INFÉRIEUR À CREWAI SUR L'INTÉGRATION MULTI-NIVEAUX : CrewAI offre les 3 niveaux clé en main. AutoGen nécessite plus de configuration pour atteindre le même niveau de sophistication.
+
+INFÉRIEUR À LANGGRAPH SUR LA ROBUSTESSE : L'état LangGraph est centralisé, typé, persistable et auditable. La mémoire AutoGen est plus distribuée et moins contrôlée.";"★★★☆☆  CORRECT — historique par agent, par session
+
+Chaque agent garde son historique de conversation. Pas de mémoire partagée globale ni de persistance avancée entre sessions.
+
+SUPÉRIEUR À STRANDS, SEMANTIC KERNEL, SWARM.
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN : Ces 3 ont des mémoires plus riches, plus persistantes et plus partagées.";"★★★☆☆  CORRECT — mémoire via artefacts produits
+
+Les documents produits (specs, code, rapports) constituent la mémoire collective.
+
+ORIGINAL PAR RAPPORT AUX AUTRES : Aucun autre framework ne structure la mémoire comme une séquence de documents formels. C'est adapté au workflow de dev.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN : Ces 3 ont des mémoires plus dynamiques. MetaGPT ne retient que ce qui est explicitement documenté dans un artefact — le contexte implicite des échanges est perdu.";"★★☆☆☆  AUTOMATIQUE MAIS OPAQUE
+
+Le contexte est géré via MCP automatiquement. Peu de contrôle développeur.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN, CAMEL, METAGPT : Ces 5 donnent plus de contrôle sur ce qui est mémorisé et comment. Strands décide pour toi — problématique pour des systèmes critiques.";"★★★★☆  EXCELLENT POUR LA MÉMOIRE DOCUMENTAIRE
+
+VectorDB + RAG : la meilleure mémoire documentaire du marché. Retrouver des informations dans des millions de documents en quelques ms.
+
+SUPÉRIEUR À TOUS SUR CE TYPE SPÉCIFIQUE DE MÉMOIRE : Aucun autre framework n'égale LlamaIndex pour la mémoire sémantique sur des corpus de documents.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN SUR LA MÉMOIRE PROCÉDURALE ET CONVERSATIONNELLE : LlamaIndex excelle pour retrouver des données. Il est mauvais pour mémoriser ce qui s'est passé dans un workflow d'agents.";"★★☆☆☆  PLUGINS MÉMOIRE — dépendant de l'éco Microsoft
+
+Azure Cognitive Search intégré. Fonctionne bien dans l'éco MS, peu portable ailleurs.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN, LLAMAINDEX, CAMEL, METAGPT sur la richesse et la portabilité de la mémoire.";"★☆☆☆☆  ZÉRO MÉMOIRE PERSISTANTE
+
+Juste l'historique de conversation brut passé au handoff. Si la conversation est trop longue, les premières informations disparaissent de la fenêtre du LLM.
+
+INFÉRIEUR À TOUS : Aucun framework n'est plus limité sur la mémoire. Pour toute tâche qui dure plus de quelques échanges ou qui doit reprendre après une interruption, Swarm est inutilisable."
+Extensibilité;"★★★★★  MAXIMAL — Python pur, aucune contrainte
+
+Chaque nœud est une fonction Python ordinaire. On branche n'importe quoi.
+
+SUPÉRIEUR À CREWAI : CrewAI impose la structure ""agent + rôle + tâche + équipe"". On ne peut pas la contourner complètement. LangGraph n'impose rien.
+
+SUPÉRIEUR À AUTOGEN : AutoGen a ses propres abstractions (ConversableAgent, GroupChat). LangGraph laisse plus de liberté pour des cas très atypiques.
+
+SUPÉRIEUR À METAGPT : MetaGPT est extensible dans le domaine dev. LangGraph est extensible dans n'importe quel domaine.
+
+SUPÉRIEUR À SEMANTIC KERNEL : Semantic Kernel est extensible dans l'éco Microsoft. LangGraph est extensible partout.";"★★★★☆  TRÈS BON — accessible et bien conçu
+
+Outils custom ajoutés en 1 décorateur Python (@tool). API claire pour étendre les agents.
+
+SUPÉRIEUR À METAGPT, STRANDS, SEMANTIC KERNEL, SWARM sur l'extensibilité générale.
+
+INFÉRIEUR À LANGGRAPH : La structure ""équipe + rôles"" est imposée. Pour des cas très atypiques, on finit par ""lutter contre le framework"".
+
+INFÉRIEUR À AUTOGEN : AutoGen offre un niveau bas plus accessible pour des patterns d'extension avancés.";"★★★★★  SUPÉRIEUR — double niveau d'abstraction
+
+Haut niveau (abstractions prêtes) ET bas niveau (contrôle total des messages).
+
+SUPÉRIEUR À CREWAI : CrewAI est bien haut niveau mais le bas niveau est moins accessible. AutoGen permet de descendre au niveau des messages bruts si nécessaire — sans changer de framework.
+
+ÉGAL À LANGGRAPH sur l'extensibilité réelle, avec un avantage sur la flexibilité de communication.
+
+SUPÉRIEUR À TOUS LES AUTRES : MetaGPT, Strands, LlamaIndex, Semantic Kernel, Swarm sont tous plus contraignants.";"★★★★☆  EXCELLENT POUR LA RECHERCHE — sans garde-fous production
+
+Tout est modifiable. Conçu pour expérimenter.
+
+SUPÉRIEUR À METAGPT, STRANDS, SEMANTIC KERNEL, SWARM sur la liberté d'extension.
+
+INFÉRIEUR À LANGGRAPH ET AUTOGEN : Ces 2 sont aussi extensibles mais avec plus de robustesse et de documentation pour la production. La flexibilité de CAMEL vient sans les garde-fous nécessaires à des systèmes critiques.";"★★★☆☆  BON DANS LE DOMAINE DEV — rigide ailleurs
+
+Extensible pour ajouter des rôles de dev, personnaliser les SOPs, créer de nouvelles actions dans le pipeline.
+
+SUPÉRIEUR À SEMANTIC KERNEL, SWARM.
+INFÉRIEUR À LANGGRAPH, AUTOGEN, CREWAI, CAMEL, STRANDS : Ces 5 sont plus extensibles en dehors de leur domaine de prédilection.";"★★★☆☆  BON VIA MCP — lock-in AWS
+
+MCP facilite l'ajout d'outils. Mais tout l'écosystème optimisé pour AWS.
+
+SUPÉRIEUR À SEMANTIC KERNEL, SWARM.
+INFÉRIEUR À LANGGRAPH, AUTOGEN, CREWAI, CAMEL : Ces 4 permettent une extension vraiment portable, sans dépendance à un cloud spécifique.";"★★★☆☆  EXCELLENT POUR LE RAG — limité hors de ce domaine
+
+50+ VectorDB, 20+ readers, re-rankers custom. Tout ce qui touche au RAG est extensible.
+
+SUPÉRIEUR À SEMANTIC KERNEL, SWARM dans le domaine RAG.
+INFÉRIEUR À LANGGRAPH, AUTOGEN, CREWAI, CAMEL pour tout ce qui n'est pas du RAG.";"★★☆☆☆  LIÉ À MICROSOFT
+
+Extensible dans l'éco MS. Hors de cet écosystème : beaucoup de friction.
+
+SUPÉRIEUR À SWARM uniquement.
+INFÉRIEUR À TOUS LES AUTRES : Même MetaGPT, dans son domaine, est plus extensible que Semantic Kernel hors de l'éco Microsoft.";"★☆☆☆☆  MINIMAL — code de 300 lignes
+
+Ajouter des fonctionnalités complexes = réécrire le framework soi-même. Ce n'est pas de l'extensibilité.
+
+INFÉRIEUR À TOUS sans exception."
+"Facilité
+d'apprentissage";"★★☆☆☆  DIFFICILE — 2-4 semaines pour être productif
+
+Il faut comprendre : graphes orientés, state machines, LangChain, typage Python avancé.
+
+MOINS ACCESSIBLE QUE CREWAI (qui prend quelques heures) et QU'AUTOGEN (quelques jours).
+
+MAIS JUSTIFIÉ : Cette complexité n'est pas du bruit — chaque concept appris apporte de la puissance réelle. Un développeur LangGraph maîtrisé construit des systèmes qu'aucun autre framework ne peut égaler.
+
+MOINS DIFFICILE QUE SEMANTIC KERNEL : Semantic Kernel nécessite en plus Azure et souvent C#/.NET.";"★★★★★  LE PLUS ACCESSIBLE — quelques heures
+
+API intuitive, doc exemplaire, 10 lignes pour créer une équipe.
+
+SUPÉRIEUR À TOUS LES AUTRES sur ce critère :
+- vs AutoGen : AutoGen est plus complexe (GroupChat, protocoles). CrewAI est plus immédiat.
+- vs LangGraph : LangGraph demande 2-4 semaines. CrewAI = quelques heures.
+- vs MetaGPT : MetaGPT nécessite de comprendre les SOPs avant de commencer.
+- vs CAMEL : CAMEL suppose une familiarité avec la théorie SMA.
+
+ATTENTION : La facilité de CrewAI n'est pas de la simplicité — c'est de l'abstraction bien faite. On peut aller loin sans se battre contre le framework.";"★★★☆☆  MOYENNE — quelques jours
+
+Les bases (2 agents qui se parlent) sont simples. Les patterns avancés (GroupChat, NestedChat) prennent plus de temps.
+
+PLUS ACCESSIBLE QUE LANGGRAPH : Pas besoin de comprendre les graphes.
+PLUS ACCESSIBLE QUE SEMANTIC KERNEL : Pas besoin d'Azure ni de C#.
+MOINS ACCESSIBLE QUE CREWAI : CrewAI cache plus de complexité. AutoGen l'expose.";"★★★☆☆  MOYENNE — plus facile si on vient de la recherche
+
+Suppose une familiarité avec les concepts SMA théoriques. Moins d'exemples pratiques que CrewAI/AutoGen.
+
+PLUS ACCESSIBLE QUE LANGGRAPH ET SEMANTIC KERNEL.
+MOINS ACCESSIBLE QUE CREWAI ET SWARM.";"★★★☆☆  MOYENNE — comprendre les SOPs prend du temps
+
+Il faut comprendre la structure SOP et mapper son cas au modèle ""équipe de dev"".
+
+PLUS ACCESSIBLE QUE LANGGRAPH ET SEMANTIC KERNEL.
+MOINS ACCESSIBLE QUE CREWAI : CrewAI est plus intuitif et plus documenté.
+SIMILAIRE À AUTOGEN ET CAMEL.";"★★★★★  TRÈS FACILE — 1-2h
+
+""Donne des outils au LLM, il s'en occupe."" Interface minimale.
+
+ÉGAL À CREWAI sur la facilité de démarrage.
+SUPÉRIEUR À TOUS LES AUTRES sur la vitesse d'onboarding.
+
+MAIS : cette facilité cache peu de contrôle. Strands est facile parce qu'il décide pour toi — pas parce que ses abstractions sont bien pensées comme CrewAI.";"★★★☆☆  MOYENNE — le RAG demande des connaissances
+
+Configurer un bon pipeline RAG (chunking, embeddings, retriever, reranker) nécessite de comprendre ces concepts.
+
+PLUS ACCESSIBLE QUE LANGGRAPH ET SEMANTIC KERNEL.
+MOINS ACCESSIBLE QUE CREWAI ET STRANDS.";"★★☆☆☆  DIFFICILE — éco Microsoft + concepts propres
+
+Azure + concepts SK (kernel, plugins, planners) + souvent C#/.NET. Accessible surtout aux équipes déjà dans l'éco Microsoft.
+
+MOINS ACCESSIBLE QUE TOUS LES AUTRES sauf LangGraph (qui est aussi difficile mais pour des raisons plus universelles).";"★★★★☆  FACILE — 1h pour tout comprendre
+
+Code source court (~300 lignes), concepts simples, README direct.
+
+PLUS ACCESSIBLE QUE TOUS SAUF CREWAI ET STRANDS.
+
+MAIS : on atteint les limites aussi vite qu'on l'a appris. La facilité de Swarm reflète sa pauvreté fonctionnelle, pas la qualité de sa conception."
+"Maturité
+production";"★★★★★  RÉFÉRENCE INDUSTRIELLE
+
+Centaines d'entreprises en prod. LangGraph Cloud (monitoring, persistance, déploiement). 35k+ étoiles GitHub. Bugs corrigés rapidement.
+
+SUPÉRIEUR À CREWAI : LangGraph Cloud est plus complet qu'une infrastructure CrewAI en auto-hébergement.
+SUPÉRIEUR À AUTOGEN : Novo Nordisk est un signal fort pour AutoGen, mais LangGraph a plus de diversité de cas d'usage documentés.
+SUPÉRIEUR À TOUS LES AUTRES : MetaGPT et CAMEL sont des outils de recherche, Strands est trop récent, Swarm est explicitement ""not for production"".";"★★★★★  PRODUCTION-GRADE — le meilleur rapport rapidité/fiabilité
+
+Utilisé en entreprise sur des cas réels. Mises à jour fréquentes, roadmap claire, doc exemplaire.
+
+SUPÉRIEUR À AUTOGEN SUR L'ACCESSIBILITÉ PRODUCTION : AutoGen est mature mais demande plus de configuration pour être en prod. CrewAI est ""production-ready"" dès le premier projet.
+
+SUPÉRIEUR À METAGPT, CAMEL, STRANDS, SWARM : Ces 4 sont moins éprouvés en production.
+
+INFÉRIEUR À LANGGRAPH SUR L'INFRASTRUCTURE : LangGraph Cloud offre plus de fonctionnalités managées (monitoring avancé, checkpointing géré).";"★★★★☆  TRÈS MATURE — validé par Novo Nordisk
+
+Utilisé en production dans l'industrie pharmaceutique mondiale (secteur ultra-régulé).
+
+SUPÉRIEUR À METAGPT, CAMEL, STRANDS, SWARM.
+INFÉRIEUR À LANGGRAPH ET CREWAI : Ces 2 ont plus de diversité de cas d'usage documentés et une infrastructure de déploiement plus complète.";"★★☆☆☆  OUTIL DE RECHERCHE — pas pour la production
+
+Excellent dans les papiers académiques. Peu de cas prod documentés à grande échelle.
+
+PLUS MATURE QUE STRANDS ET SWARM : CAMEL existe depuis plus longtemps et a une communauté de recherche active.
+MOINS MATURE QUE LANGGRAPH, CREWAI, AUTOGEN, LLAMAINDEX, SEMANTIC KERNEL pour la production.";"★★☆☆☆  EN CROISSANCE — beaucoup de buzz, peu de prod critique
+
+40k+ étoiles GitHub (curiosité) mais peu de productions critiques documentées à grande échelle.
+
+PLUS MATURE QUE STRANDS ET SWARM.
+MOINS MATURE QUE LANGGRAPH, CREWAI, AUTOGEN, LLAMAINDEX pour des projets critiques.";"★★☆☆☆  TROP RÉCENT (2024) — à éviter pour les projets critiques
+
+Malgré le soutien d'AWS, l'écosystème est jeune. Peu de retours d'expérience en production.
+
+PLUS MATURE QUE SWARM : Swarm est expérimental. Strands a au moins le soutien d'une grande entreprise (AWS).
+MOINS MATURE QUE TOUT LE RESTE : LangGraph, CrewAI, AutoGen, LlamaIndex, Semantic Kernel, MetaGPT, CAMEL ont tous plus d'historique.";"★★★★☆  TRÈS MATURE POUR LE RAG — moins pour les agents
+
+Massivement utilisé en production pour les pipelines RAG. LlamaCloud disponible.
+
+SUPÉRIEUR À METAGPT, CAMEL, STRANDS, SWARM pour la maturité en production.
+COMPARABLE À AUTOGEN sur la maturité générale.
+INFÉRIEUR À LANGGRAPH ET CREWAI sur la maturité multi-agents spécifiquement.";"★★★☆☆  MATURE DANS L'ÉCO MICROSOFT — niche
+
+Utilisé dans Copilot et les produits Microsoft. Très stable dans cet écosystème.
+
+SUPÉRIEUR À METAGPT, CAMEL, STRANDS, SWARM.
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN, LLAMAINDEX : Ces 4 ont une présence en production plus large et plus diversifiée.";"★☆☆☆☆  EXPÉRIMENTAL — ne jamais utiliser en production
+
+OpenAI l'a dit explicitement : ""educational resource"", ""not meant for production"".
+
+INFÉRIEUR À TOUS sans exception et sans discussion possible."
+"Support
+LLM multiple";"★★★★★  50+ LLMs — zéro vendor lock-in
+
+Via LangChain : GPT-4, Claude, Gemini, LLaMA, Mistral, Cohere, Groq... Changer = 1 ligne.
+
+SUPÉRIEUR À METAGPT : MetaGPT est optimisé pour GPT-4. Avec d'autres LLMs, les prompts internes ne sont pas adaptés et les résultats dégradent.
+SUPÉRIEUR À STRANDS : Strands est optimisé pour Bedrock. LangGraph est totalement indépendant.
+SUPÉRIEUR À SEMANTIC KERNEL : SK est optimisé pour Azure OpenAI.
+SUPÉRIEUR À SWARM : Lock-in OpenAI complet.
+ÉGAL À CREWAI ET AUTOGEN sur le niveau de support multi-LLM.";"★★★★★  100+ LLMs VIA LITELLM — le plus complet
+
+LiteLLM unifie 100+ fournisseurs. Granularité maximale : chaque agent de l'équipe peut avoir son propre LLM.
+
+SUPÉRIEUR À LANGGRAPH SUR LA GRANULARITÉ : LangGraph supporte multi-LLMs. CrewAI + LiteLLM permet d'assigner un LLM différent à chaque agent individuel dans la même équipe — optimisation coût/performance impossible à atteindre aussi facilement ailleurs.
+
+SUPÉRIEUR À METAGPT, STRANDS, SEMANTIC KERNEL, SWARM : Ces 4 ont des lock-ins partiels ou totaux.";"★★★★★  TOUS LLMs — multi-modèles par agent dans la même conversation
+
+Fonctionnalité unique : agent A = GPT-4, agent B = Claude, dans la même conversation.
+
+SUPÉRIEUR À LANGGRAPH ET CREWAI SUR CE POINT PRÉCIS : Ces 2 supportent le multi-LLM mais la mixité dans une même conversation est moins naturelle. AutoGen est le seul à rendre triviale l'utilisation de LLMs différents pour différents agents dans le même système.
+
+SUPÉRIEUR À METAGPT, STRANDS, SEMANTIC KERNEL, SWARM : Ces 4 ont des lock-ins.";"★★★★☆  PRINCIPAUX LLMs — bien pour comparer
+
+GPT-4, Claude, LLaMA, Mistral supportés. Bien adapté aux comparaisons entre modèles en recherche.
+
+SUPÉRIEUR À METAGPT, STRANDS, SEMANTIC KERNEL, SWARM.
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN : Ces 3 ont plus d'intégrations et sont plus faciles à configurer pour le multi-LLM.";"★★★☆☆  GPT-4 PRINCIPALEMENT — lock-in de facto
+
+Support théorique d'autres LLMs mais prompts calibrés pour GPT-4. Avec Claude ou LLaMA, les résultats dégradent sans adaptation manuelle.
+
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN, CAMEL : Ces 4 sont vraiment agnostiques au LLM.
+SUPÉRIEUR À STRANDS, SEMANTIC KERNEL, SWARM : Ces 3 ont des lock-ins encore plus forts.";"★★★☆☆  BEDROCK D'ABORD — semi lock-in AWS
+
+Claude (via AWS), Titan, LLaMA (via AWS). Autres LLMs possibles mais moins bien intégrés.
+
+SUPÉRIEUR À SEMANTIC KERNEL ET SWARM : Ces 2 ont des lock-ins plus forts.
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN, CAMEL, METAGPT : Ces 5 sont plus portables entre fournisseurs.";"★★★★★  EXCELLENT — découplage LLM / pipeline RAG
+
+Changer de LLM ne touche pas au pipeline RAG. C'est l'un de ses points les plus forts.
+
+SUPÉRIEUR À METAGPT, STRANDS, SEMANTIC KERNEL, SWARM.
+ÉGAL À LANGGRAPH ET CREWAI sur la flexibilité LLM.
+CAS D'USAGE UNIQUE : LlamaIndex est le seul où on peut comparer facilement différents LLMs sur exactement les mêmes données de retrieval — précieux pour l'évaluation.";"★★★☆☆  AZURE OPENAI D'ABORD — semi lock-in Microsoft
+
+Azure OpenAI optimisé. Autres modèles supportés mais intégration MS Graph / Azure conçue pour Azure.
+
+SUPÉRIEUR À SWARM : Lock-in complet pour Swarm.
+INFÉRIEUR À LANGGRAPH, CREWAI, AUTOGEN, CAMEL, LLAMAINDEX, METAGPT : Ces 6 sont plus portables.";"★★☆☆☆  OPENAI UNIQUEMENT EN PRATIQUE
+
+Conçu pour GPT-4. Changer de LLM = modifier le code source.
+
+LE LOCK-IN LE PLUS FORT DE TOUT LE TABLEAU.
+
+INFÉRIEUR À TOUS SANS EXCEPTION : Même Strands et Semantic Kernel, malgré leurs lock-ins partiels, supportent au moins plusieurs modèles de façon raisonnable."
+;;;;;;;;;
+LÉGENDE;;;;;;;;;
+★★★★★  5 — Supérieur / Référence;;★★★★☆  4 — Très bon;;★★★☆☆  3 — Correct;;★★☆☆☆  2 — Limité;;★☆☆☆☆  1 — Très faible / Ne pas utiliser;
